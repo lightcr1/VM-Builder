@@ -1,0 +1,126 @@
+services:
+  proxy:
+    image: caddy:2.10
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+      - api
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_API_MODE: http
+        VITE_API_URL: /api
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://vm_builder:vm_builder@db:5432/vm_builder}
+      APP_ENV: ${APP_ENV:-development}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-change-me-now}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost,http://localhost:8080}
+      PROVISIONING_MODE: ${PROVISIONING_MODE:-queue}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_NAME: ${REDIS_QUEUE_NAME:-provisioning}
+      REDIS_JOB_TIMEOUT_SECONDS: ${REDIS_JOB_TIMEOUT_SECONDS:-600}
+      PROVISIONING_RETRY_MAX: ${PROVISIONING_RETRY_MAX:-3}
+      PROVISIONING_RETRY_INTERVALS: ${PROVISIONING_RETRY_INTERVALS:-10,30,60}
+      LDAP_ENABLED: ${LDAP_ENABLED:-false}
+      LDAP_SERVER_URI: ${LDAP_SERVER_URI:-ldap://ldap.example.com}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-cn=service,dc=example,dc=com}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-change-me}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=example,dc=com}
+      LDAP_ALLOWED_GROUPS: ${LDAP_ALLOWED_GROUPS:-vm-builder-users,vm-builder-admins}
+      PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://proxmox.example.com:8006/api2/json}
+      PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID:-root@pam!vm-builder}
+      PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET:-change-me}
+      PROXMOX_VERIFY_TLS: ${PROXMOX_VERIFY_TLS:-true}
+      PROXMOX_ENABLED: ${PROXMOX_ENABLED:-false}
+      PROXMOX_NODE: ${PROXMOX_NODE:-pve1}
+      PROXMOX_TEMPLATE_VMID: ${PROXMOX_TEMPLATE_VMID:-9000}
+      PROXMOX_TARGET_NODE: ${PROXMOX_TARGET_NODE:-pve1}
+      PROXMOX_STORAGE: ${PROXMOX_STORAGE:-local-lvm}
+      PROXMOX_BRIDGE: ${PROXMOX_BRIDGE:-vmbr0}
+      PROXMOX_CLONE_MODE: ${PROXMOX_CLONE_MODE:-full}
+      PROXMOX_POLL_INTERVAL_SECONDS: ${PROXMOX_POLL_INTERVAL_SECONDS:-2.0}
+      PROXMOX_TASK_TIMEOUT_SECONDS: ${PROXMOX_TASK_TIMEOUT_SECONDS:-180}
+      PROXMOX_TEMPLATE_DISK_GB: ${PROXMOX_TEMPLATE_DISK_GB:-20}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./apps/api
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://vm_builder:vm_builder@db:5432/vm_builder}
+      APP_ENV: ${APP_ENV:-development}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-change-me-now}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost,http://localhost:8080}
+      PROVISIONING_MODE: ${PROVISIONING_MODE:-queue}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_QUEUE_NAME: ${REDIS_QUEUE_NAME:-provisioning}
+      REDIS_JOB_TIMEOUT_SECONDS: ${REDIS_JOB_TIMEOUT_SECONDS:-600}
+      PROVISIONING_RETRY_MAX: ${PROVISIONING_RETRY_MAX:-3}
+      PROVISIONING_RETRY_INTERVALS: ${PROVISIONING_RETRY_INTERVALS:-10,30,60}
+      LDAP_ENABLED: ${LDAP_ENABLED:-false}
+      LDAP_SERVER_URI: ${LDAP_SERVER_URI:-ldap://ldap.example.com}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-cn=service,dc=example,dc=com}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-change-me}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=example,dc=com}
+      LDAP_ALLOWED_GROUPS: ${LDAP_ALLOWED_GROUPS:-vm-builder-users,vm-builder-admins}
+      PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://proxmox.example.com:8006/api2/json}
+      PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID:-root@pam!vm-builder}
+      PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET:-change-me}
+      PROXMOX_VERIFY_TLS: ${PROXMOX_VERIFY_TLS:-true}
+      PROXMOX_ENABLED: ${PROXMOX_ENABLED:-false}
+      PROXMOX_NODE: ${PROXMOX_NODE:-pve1}
+      PROXMOX_TEMPLATE_VMID: ${PROXMOX_TEMPLATE_VMID:-9000}
+      PROXMOX_TARGET_NODE: ${PROXMOX_TARGET_NODE:-pve1}
+      PROXMOX_STORAGE: ${PROXMOX_STORAGE:-local-lvm}
+      PROXMOX_BRIDGE: ${PROXMOX_BRIDGE:-vmbr0}
+      PROXMOX_CLONE_MODE: ${PROXMOX_CLONE_MODE:-full}
+      PROXMOX_POLL_INTERVAL_SECONDS: ${PROXMOX_POLL_INTERVAL_SECONDS:-2.0}
+      PROXMOX_TASK_TIMEOUT_SECONDS: ${PROXMOX_TASK_TIMEOUT_SECONDS:-180}
+      PROXMOX_TEMPLATE_DISK_GB: ${PROXMOX_TEMPLATE_DISK_GB:-20}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vm_builder}
+      POSTGRES_USER: ${POSTGRES_USER:-vm_builder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vm_builder}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vm_builder} -d ${POSTGRES_DB:-vm_builder}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  postgres_data:
