@@ -19,6 +19,8 @@ export function AdminPage() {
   });
   const [message, setMessage] = useState<string | null>(null);
   const [busyRequestId, setBusyRequestId] = useState<number | null>(null);
+  const firewallGuardrails = requests.map((request) => extractFirewallGuardrail(request.providerPayload)).filter(Boolean);
+  const latestFirewallGuardrail = firewallGuardrails[0];
 
   async function loadAdminData() {
     const [userList, tenantList, events] = await Promise.all([
@@ -94,10 +96,42 @@ export function AdminPage() {
     <div className="page-stack">
       <SectionHeader
         title="Admin"
-        description="Central tenant and identity oversight. LDAP and AD can be mapped here later."
+        description="Central tenant, identity and recovery controls for the hosted platform."
       />
 
       {message ? <p className="success-banner">{message}</p> : null}
+
+      <div className="metric-strip">
+        <div>
+          <span>Users</span>
+          <strong>{users.length}</strong>
+        </div>
+        <div>
+          <span>Tenants</span>
+          <strong>{tenants.length}</strong>
+        </div>
+        <div>
+          <span>Failed jobs</span>
+          <strong>{requests.filter((request) => request.status === "failed").length}</strong>
+        </div>
+      </div>
+
+      <section className="surface">
+        <div className="table-header">
+          <p>Provider guardrails</p>
+          <span>Server-side controls applied by the platform, not selectable by VM users.</span>
+        </div>
+        <div className="summary-stack">
+          <div className="summary-item">
+            <span>Default Proxmox firewall group</span>
+            <strong>{latestFirewallGuardrail?.group ?? "Configured via PROXMOX_DEFAULT_FIREWALL_GROUP"}</strong>
+          </div>
+          <div className="summary-item">
+            <span>VM firewall enforcement</span>
+            <strong>{latestFirewallGuardrail?.enabled ?? "Configured via PROXMOX_ENABLE_VM_FIREWALL"}</strong>
+          </div>
+        </div>
+      </section>
 
       <div className="split-grid admin-forms">
         <section className="surface form-surface">
@@ -302,6 +336,20 @@ function extractRequestError(payload: string): string | null {
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
     return parsed.error ? String(parsed.error) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractFirewallGuardrail(payload: string): { group?: string; enabled?: string } | null {
+  try {
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    const group = parsed.firewall_group ? String(parsed.firewall_group) : undefined;
+    const enabled = parsed.firewall_enabled ? String(parsed.firewall_enabled) : undefined;
+    if (!group && !enabled) {
+      return null;
+    }
+    return { group, enabled };
   } catch {
     return null;
   }

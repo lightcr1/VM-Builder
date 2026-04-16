@@ -74,7 +74,7 @@ export function DashboardPage() {
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
-            <Link className="primary-link" to="/vms/new">
+            <Link className="primary-link" to="/create">
               Create VM
             </Link>
           </div>
@@ -110,40 +110,86 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <section className="surface">
-        <div className="table-header">
-          <p>Recent VMs</p>
-          <span>Scoped to your memberships and ownership.</span>
-        </div>
-        <div className="vm-table">
-          {vms.length === 0 ? <p className="empty-state">No VMs visible yet.</p> : null}
-          {vms.map((vm) => (
-            <article className="vm-row" key={vm.id}>
-              <div>
-                <strong>{vm.name}</strong>
-                <span>{vm.template.name}</span>
-              </div>
-              <div>
-                <span>{vm.tenant.name}</span>
-                <span>{new Date(vm.createdAt).toLocaleDateString()}</span>
-              </div>
-              <StatusPill status={vm.status} />
-            </article>
-          ))}
-        </div>
-      </section>
+      <div className="dashboard-grid">
+        <section className="surface">
+          <div className="table-header">
+            <p>Instances</p>
+            <span>Scoped to your memberships and ownership.</span>
+          </div>
+          <div className="table-columns">
+            <span>Name</span>
+            <span>Tenant</span>
+            <span>Created</span>
+            <span>Status</span>
+          </div>
+          <div className="vm-table">
+            {vms.length === 0 ? <p className="empty-state">No VMs visible yet.</p> : null}
+            {vms.map((vm) => (
+              <article className="vm-row vm-grid-row" key={vm.id}>
+                <div>
+                  <strong>{vm.name}</strong>
+                  <span>{vm.template.name}</span>
+                </div>
+                <div>
+                  <strong>{vm.tenant.name}</strong>
+                  <span>{vm.providerName}</span>
+                </div>
+                <div>
+                  <strong>{new Date(vm.createdAt).toLocaleDateString()}</strong>
+                  <span>{vm.providerVmId ? `VMID ${vm.providerVmId}` : "Pending provider ID"}</span>
+                </div>
+                <StatusPill status={vm.status} />
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="surface summary-panel">
+          <div className="table-header">
+            <p>Platform summary</p>
+            <span>Fast operator context, similar to a cloud overview pane.</span>
+          </div>
+          <div className="summary-stack">
+            <div className="summary-item">
+              <span>Running instances</span>
+              <strong>{vms.filter((vm) => vm.status === "running").length}</strong>
+            </div>
+            <div className="summary-item">
+              <span>Failed requests</span>
+              <strong>{requests.filter((request) => request.status === "failed").length}</strong>
+            </div>
+            <div className="summary-item">
+              <span>Default tenant views</span>
+              <strong>{tenants.length}</strong>
+            </div>
+          </div>
+          <div className="summary-note">
+            <strong>Hosted by arcs-cloud</strong>
+            <span>Managed self-service infrastructure with a direct path into Proxmox-backed automation.</span>
+            <a href="https://arcs-cloud.ch" target="_blank" rel="noreferrer">
+              Visit arcs-cloud.ch
+            </a>
+          </div>
+        </section>
+      </div>
 
       <section className="surface">
         <div className="table-header">
-          <p>Recent Requests</p>
+          <p>Provisioning queue</p>
           <span>Tracks the async worker path from request to completed provisioning.</span>
+        </div>
+        <div className="table-columns request-columns">
+          <span>Request</span>
+          <span>Execution</span>
+          <span>Submitted</span>
+          <span>Status</span>
         </div>
         <div className="vm-table">
           {requests.length === 0 ? <p className="empty-state">No provisioning requests yet.</p> : null}
           {requests.slice(0, 6).map((request) => {
             const details = parsePayload(request.providerPayload);
             return (
-              <article className="vm-row request-row" key={request.id}>
+              <article className="vm-row request-grid-row" key={request.id}>
                 <div>
                   <strong>Request #{request.id}</strong>
                   <span>
@@ -151,9 +197,12 @@ export function DashboardPage() {
                   </span>
                 </div>
                 <div>
-                  <span>{details.providerStatus ?? details.ipConfigMode ?? "Awaiting worker"}</span>
-                  {details.error ? <span className="request-error">{details.error}</span> : null}
-                  <span>{new Date(request.createdAt).toLocaleString()}</span>
+                  <strong>{details.providerStatus ?? details.ipConfigMode ?? "Awaiting worker"}</strong>
+                  {details.error ? <span className="request-error">{details.error}</span> : <span>Worker-managed execution</span>}
+                </div>
+                <div>
+                  <strong>{new Date(request.createdAt).toLocaleDateString()}</strong>
+                  <span>{new Date(request.createdAt).toLocaleTimeString()}</span>
                 </div>
                 <RequestStatusPill status={request.status} />
               </article>

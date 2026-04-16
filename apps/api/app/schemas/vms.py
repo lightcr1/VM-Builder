@@ -1,3 +1,4 @@
+import enum
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -5,6 +6,11 @@ from pydantic import BaseModel, Field
 from app.models.domain import RequestStatus, VmStatus
 from app.schemas.common import ORMModel
 from app.schemas.users import TenantRead, UserRead
+
+
+class VmAction(str, enum.Enum):
+    START = "start"
+    STOP = "stop"
 
 
 class VmTemplateRead(ORMModel):

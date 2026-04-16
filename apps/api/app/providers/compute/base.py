@@ -27,8 +27,24 @@ class ComputeVmResult:
     provider_vm_id: str
     status: str
     task_ref: str | None = None
+    metadata: dict[str, str | None] | None = None
+
+
+@dataclass
+class ComputeVmActionResult:
+    status: str
+    task_ref: str | None = None
 
 
 class ComputeProvider(Protocol):
     def create_vm(self, request: ComputeVmRequest) -> ComputeVmResult:
+        ...
+
+    def start_vm(self, provider_vm_id: str) -> ComputeVmActionResult:
+        ...
+
+    def stop_vm(self, provider_vm_id: str) -> ComputeVmActionResult:
+        ...
+
+    def delete_vm(self, provider_vm_id: str) -> ComputeVmActionResult:
         ...

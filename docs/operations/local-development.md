@@ -8,6 +8,7 @@ docker compose up --build
 ```
 
 Das lokale Default-Setup startet `proxy`, `web`, `api`, `worker`, `redis` und `db`.
+Der Proxy exposed die App standardmaessig auf `https://10.10.40.61:4000`.
 
 ## Migrationen
 
@@ -26,9 +27,16 @@ Die API fuehrt diese Migrationen beim Start ebenfalls automatisch aus.
 
 ## Endpoints
 
-- Portal: `http://localhost:8080`
-- API health: `http://localhost:8080/health`
-- API base: `http://localhost:8080/api`
+- Portal: `https://10.10.40.61:4000`
+- API health: `https://10.10.40.61:4000/health`
+- API base: `https://10.10.40.61:4000/api`
+
+## TLS
+
+- Der Proxy erstellt beim Start automatisch ein Self-Signed-Zertifikat fuer `PROXY_HOST` und `PROXY_PORT`
+- Zertifikat: `/home/jarvis/projects/vm-builder/infra/proxy/certs/tls.crt`
+- Schluessel: `/home/jarvis/projects/vm-builder/infra/proxy/certs/tls.key`
+- Bis der Host dieses Zertifikat vertraut, funktionieren Browserzugriffe mit Warnung und CLI-Tests ueber `curl -k`
 
 ## VM Request Fields
 

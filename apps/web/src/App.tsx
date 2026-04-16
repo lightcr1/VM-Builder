@@ -2,9 +2,14 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type VmInput } from "@/lib/api";
 import { AdminPage } from "@/pages/AdminPage";
+import { AccessPage } from "@/pages/AccessPage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { InstancesPage } from "@/pages/InstancesPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { NetworksPage } from "@/pages/NetworksPage";
+import { RequestsPage } from "@/pages/RequestsPage";
 import { VmCreatePage } from "@/pages/VmCreatePage";
+import { VmDetailPage } from "@/pages/VmDetailPage";
 import { AppShell } from "@/components/AppShell";
 import { type Me, type Session, type User } from "@/types";
 
@@ -107,7 +112,13 @@ export default function App() {
           }
         >
           <Route index element={<DashboardPage />} />
-          <Route path="vms/new" element={<VmCreatePage />} />
+          <Route path="instances" element={<InstancesPage />} />
+          <Route path="instances/:vmId" element={<VmDetailPage />} />
+          <Route path="requests" element={<RequestsPage />} />
+          <Route path="networks" element={<NetworksPage />} />
+          <Route path="access" element={<AccessPage />} />
+          <Route path="create" element={<VmCreatePage />} />
+          <Route path="vms/new" element={<Navigate to="/create" replace />} />
           <Route
             path="admin"
             element={
