@@ -388,6 +388,81 @@ Der aktuelle Proxmox-Adapter macht:
 
 Wichtig: Die Template-VM in Proxmox muss korrekt vorbereitet sein, idealerweise als Cloud-Init-Template.
 
+## Proxmox API-Token und Rechte
+
+VM Builder sollte nicht mit einem normalen Benutzerpasswort arbeiten, sondern mit einem Proxmox API-Token.
+
+Empfohlener Ablauf auf Proxmox:
+
+1. Einen dedizierten User anlegen, z.B. `vm-builder@pve` oder `vm-builder@pam`.
+2. Fuer diesen User einen API-Token anlegen, z.B. `vm-builder`.
+3. Token in `.env` eintragen.
+4. Dem User bzw. Token nur die Rechte geben, die VM Builder wirklich braucht.
+
+Token-Beispiel:
+
+```env
+PROXMOX_TOKEN_ID=vm-builder@pve!vm-builder
+PROXMOX_TOKEN_SECRET=<token-secret>
+```
+
+Wenn du den Token im Proxmox-UI als "privilege separated" anlegst, muessen die Rechte explizit auch fuer den Token passen. Wenn du privilege separation deaktivierst, erbt der Token die Rechte des Users. Fuer Produktion ist ein sauber begrenzter Token sinnvoller.
+
+### Welche Variablen welche Proxmox-Rechte brauchen
+
+Diese Tabelle beschreibt, welche VM-Builder-Konfiguration welche Proxmox-Berechtigungen ausloest.
+
+| VM Builder Einstellung | Was VM Builder macht | Typische Proxmox-Rechte |
+| --- | --- | --- |
+| `PROXMOX_TEMPLATE_VMID` | Template-VM klonen | `VM.Clone` auf der Template-VM |
+| `PROXMOX_TARGET_NODE` | neue VM auf Zielnode erstellen | `VM.Allocate` auf dem Ziel-Pool oder Pfad |
+| `PROXMOX_STORAGE` | Disk fuer Clone/Resize auf Storage anlegen | `Datastore.AllocateSpace` auf dem Storage |
+| Paket-Auswahl im Portal | CPU/RAM/Disk der VM setzen | `VM.Config.CPU`, `VM.Config.Memory`, `VM.Config.Disk` |
+| `PROXMOX_BRIDGE` | `net0` setzen | `VM.Config.Network` |
+| Cloud-Init User und SSH-Key | Cloud-Init Optionen setzen | `VM.Config.Cloudinit` |
+| `Start after create`, Start/Stop im Portal | VM starten/stoppen | `VM.PowerMgmt` |
+| Delete im Portal | VM loeschen | `VM.Allocate` auf der VM bzw. dem relevanten Pfad |
+| `PROXMOX_ENABLE_VM_FIREWALL` | VM-Firewall aktivieren | `VM.Config.Options` und je nach Proxmox-Version Firewall-Rechte auf VM-Ebene |
+| `PROXMOX_DEFAULT_FIREWALL_GROUP` | Security Group als VM-Firewall-Regel setzen | Firewall-Administrationsrechte fuer VM/Datacenter-Firewall, typischerweise `Sys.Modify` bzw. passende Firewall-ACLs |
+| `PROXMOX_NODE` / `PROXMOX_TARGET_NODE` Task-Polling | Taskstatus lesen | mindestens passende Audit-/Read-Rechte, in vielen Setups `Sys.Audit` auf Node oder Pfad |
+
+Pragmatische Startrolle fuer Lab/Test:
+
+```text
+VM.Allocate
+VM.Clone
+VM.Config.CPU
+VM.Config.Memory
+VM.Config.Disk
+VM.Config.Network
+VM.Config.Cloudinit
+VM.Config.Options
+VM.PowerMgmt
+Datastore.AllocateSpace
+Sys.Audit
+Sys.Modify
+```
+
+Fuer Produktion solltest du diese Rechte enger auf die betroffenen Pfade begrenzen:
+
+- Template-VM: Clone-Recht nur auf das Template.
+- Ziel-Pool oder Ziel-Pfad: VM-Allokation nur dort, wo VM Builder VMs erstellen darf.
+- Storage: AllocateSpace nur auf dem vorgesehenen Storage.
+- Node: Audit/Task-Leserechte nur auf dem Zielnode.
+- Firewall: nur so weit wie noetig, damit die Standard-Security-Group angewendet werden kann.
+
+Beispielhafte Pfade, je nach Proxmox-Setup:
+
+```text
+/vms/<template-vmid>        VM.Clone
+/pool/<vm-builder-pool>     VM.Allocate, VM.Config.*, VM.PowerMgmt
+/storage/<storage-name>     Datastore.AllocateSpace
+/nodes/<node-name>          Sys.Audit
+/                            Firewall-/Security-Group-Rechte, falls Datacenter-Firewall-Gruppen genutzt werden
+```
+
+Die exakten ACL-Pfade haengen davon ab, ob du mit Pools, einzelnen VMs, Storage-ACLs oder Datacenter-Rechten arbeitest.
+
 ## Proxmox Firewall-Guardrail
 
 VM Builder kann automatisch eine Standard-Firewall-Policy auf jede neue VM anwenden.
