@@ -1,10 +1,16 @@
 services:
   proxy:
-    image: caddy:2.10
+    image: nginx:1.27-alpine
+    command: ["/bin/sh", "/opt/bootstrap/start-proxy.sh"]
+    environment:
+      PROXY_HOST: ${PROXY_HOST:-10.10.40.61}
+      PROXY_PORT: ${PROXY_PORT:-4000}
     ports:
-      - "8080:80"
+      - "${PROXY_PORT:-4000}:${PROXY_PORT:-4000}"
     volumes:
-      - ./infra/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/proxy/start-proxy.sh:/opt/bootstrap/start-proxy.sh:ro
+      - ./infra/proxy/certs:/certs
     depends_on:
       - web
       - api
@@ -27,7 +33,7 @@ services:
       APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me}
       APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-change-me-now}
-      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost,http://localhost:8080}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-https://10.10.40.61:4000,https://localhost:4000,https://127.0.0.1:4000}
       PROVISIONING_MODE: ${PROVISIONING_MODE:-queue}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_NAME: ${REDIS_QUEUE_NAME:-provisioning}
@@ -54,6 +60,8 @@ services:
       PROXMOX_POLL_INTERVAL_SECONDS: ${PROXMOX_POLL_INTERVAL_SECONDS:-2.0}
       PROXMOX_TASK_TIMEOUT_SECONDS: ${PROXMOX_TASK_TIMEOUT_SECONDS:-180}
       PROXMOX_TEMPLATE_DISK_GB: ${PROXMOX_TEMPLATE_DISK_GB:-20}
+      PROXMOX_ENABLE_VM_FIREWALL: ${PROXMOX_ENABLE_VM_FIREWALL:-true}
+      PROXMOX_DEFAULT_FIREWALL_GROUP: ${PROXMOX_DEFAULT_FIREWALL_GROUP:-vm-builder-default}
     depends_on:
       db:
         condition: service_healthy
@@ -70,7 +78,7 @@ services:
       APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me}
       APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-change-me-now}
-      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost,http://localhost:8080}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-https://10.10.40.61:4000,https://localhost:4000,https://127.0.0.1:4000}
       PROVISIONING_MODE: ${PROVISIONING_MODE:-queue}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_QUEUE_NAME: ${REDIS_QUEUE_NAME:-provisioning}
@@ -97,6 +105,8 @@ services:
       PROXMOX_POLL_INTERVAL_SECONDS: ${PROXMOX_POLL_INTERVAL_SECONDS:-2.0}
       PROXMOX_TASK_TIMEOUT_SECONDS: ${PROXMOX_TASK_TIMEOUT_SECONDS:-180}
       PROXMOX_TEMPLATE_DISK_GB: ${PROXMOX_TEMPLATE_DISK_GB:-20}
+      PROXMOX_ENABLE_VM_FIREWALL: ${PROXMOX_ENABLE_VM_FIREWALL:-true}
+      PROXMOX_DEFAULT_FIREWALL_GROUP: ${PROXMOX_DEFAULT_FIREWALL_GROUP:-vm-builder-default}
     depends_on:
       db:
         condition: service_healthy

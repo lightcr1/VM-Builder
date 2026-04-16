@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     proxmox_poll_interval_seconds: float = 2.0
     proxmox_task_timeout_seconds: int = 180
     proxmox_template_disk_gb: int = 20
+    proxmox_enable_vm_firewall: bool = True
+    proxmox_default_firewall_group: str = ""
 
     @property
     def cors_origins(self) -> list[str]:

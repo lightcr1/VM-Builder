@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.core.config import settings
-from app.providers.compute.base import ComputeProvider, ComputeVmRequest, ComputeVmResult
+from app.providers.compute.base import ComputeProvider, ComputeVmActionResult, ComputeVmRequest, ComputeVmResult
 
 
 class ProxmoxApiError(RuntimeError):
@@ -22,11 +22,31 @@ class ProxmoxComputeProvider(ComputeProvider):
         task_ref = self._clone_template(request)
         self._wait_for_task(task_ref)
         self._configure_vm(request)
+        firewall_metadata = self._apply_firewall_guardrail(request)
         if request.start_on_create:
-            start_task = self._post(f"/nodes/{settings.proxmox_target_node}/qemu/{request.vmid}/status/start", {})
-            self._wait_for_task(start_task)
-            return ComputeVmResult(provider_vm_id=str(request.vmid), status="running", task_ref=start_task)
-        return ComputeVmResult(provider_vm_id=str(request.vmid), status="stopped", task_ref=task_ref)
+            start_result = self.start_vm(str(request.vmid))
+            return ComputeVmResult(
+                provider_vm_id=str(request.vmid),
+                status=start_result.status,
+                task_ref=start_result.task_ref,
+                metadata=firewall_metadata,
+            )
+        return ComputeVmResult(provider_vm_id=str(request.vmid), status="stopped", task_ref=task_ref, metadata=firewall_metadata)
+
+    def start_vm(self, provider_vm_id: str) -> ComputeVmActionResult:
+        task_ref = self._post(f"/nodes/{settings.proxmox_target_node}/qemu/{provider_vm_id}/status/start", {})
+        self._wait_for_task(task_ref)
+        return ComputeVmActionResult(status="running", task_ref=task_ref)
+
+    def stop_vm(self, provider_vm_id: str) -> ComputeVmActionResult:
+        task_ref = self._post(f"/nodes/{settings.proxmox_target_node}/qemu/{provider_vm_id}/status/stop", {})
+        self._wait_for_task(task_ref)
+        return ComputeVmActionResult(status="stopped", task_ref=task_ref)
+
+    def delete_vm(self, provider_vm_id: str) -> ComputeVmActionResult:
+        task_ref = self._delete(f"/nodes/{settings.proxmox_target_node}/qemu/{provider_vm_id}")
+        self._wait_for_task(task_ref)
+        return ComputeVmActionResult(status="deleted", task_ref=task_ref)
 
     def _clone_template(self, request: ComputeVmRequest) -> str:
         path = (
@@ -111,7 +131,31 @@ class ProxmoxComputeProvider(ComputeProvider):
         parts = [f"virtio,bridge={bridge}"]
         if request.vlan_tag is not None:
             parts.append(f"tag={request.vlan_tag}")
+        if settings.proxmox_enable_vm_firewall or settings.proxmox_default_firewall_group:
+            parts.append("firewall=1")
         return ",".join(parts)
+
+    def _apply_firewall_guardrail(self, request: ComputeVmRequest) -> dict[str, str | None]:
+        metadata = {
+            "firewall_group": settings.proxmox_default_firewall_group or None,
+            "firewall_enabled": str(settings.proxmox_enable_vm_firewall).lower(),
+        }
+        if settings.proxmox_enable_vm_firewall:
+            self._put(
+                f"/nodes/{settings.proxmox_target_node}/qemu/{request.vmid}/firewall/options",
+                {"enable": "1"},
+            )
+        if settings.proxmox_default_firewall_group:
+            self._post(
+                f"/nodes/{settings.proxmox_target_node}/qemu/{request.vmid}/firewall/rules",
+                {
+                    "type": "group",
+                    "action": settings.proxmox_default_firewall_group,
+                    "enable": "1",
+                    "comment": "Managed by VM Builder",
+                },
+            )
+        return metadata
 
     def _post(self, path: str, payload: dict[str, str]) -> str:
         url = f"{settings.proxmox_base_url.rstrip('/')}{path}"
@@ -139,6 +183,35 @@ class ProxmoxComputeProvider(ComputeProvider):
         response.raise_for_status()
         body = response.json()
         if "data" not in body or not isinstance(body["data"], dict):
+            raise ProxmoxApiError("Unexpected Proxmox response")
+        return body["data"]
+
+    def _delete(self, path: str) -> str:
+        url = f"{settings.proxmox_base_url.rstrip('/')}{path}"
+        response = httpx.delete(
+            url,
+            headers=self._headers(),
+            verify=settings.proxmox_verify_tls,
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        body = response.json()
+        if "data" not in body:
+            raise ProxmoxApiError("Unexpected Proxmox response")
+        return str(body["data"])
+
+    def _put(self, path: str, payload: dict[str, str]) -> object:
+        url = f"{settings.proxmox_base_url.rstrip('/')}{path}"
+        response = httpx.put(
+            url,
+            content=urlencode(payload),
+            headers={**self._headers(), "Content-Type": "application/x-www-form-urlencoded"},
+            verify=settings.proxmox_verify_tls,
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        body = response.json()
+        if "data" not in body:
             raise ProxmoxApiError("Unexpected Proxmox response")
         return body["data"]
 

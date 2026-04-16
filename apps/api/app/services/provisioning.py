@@ -207,6 +207,8 @@ def process_provisioning_request(request_id: int) -> None:
         payload["task_ref"] = compute_result.task_ref
         payload["provider_vm_id"] = compute_result.provider_vm_id
         payload["provider_status"] = compute_result.status
+        if compute_result.metadata:
+            payload.update(compute_result.metadata)
         payload.pop("error", None)
         request.provider_payload = json.dumps(payload)
         db.commit()

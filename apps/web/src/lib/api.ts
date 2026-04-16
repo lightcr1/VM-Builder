@@ -44,9 +44,13 @@ type ApiClient = {
   };
   vms: {
     list: () => Promise<Vm[]>;
+    get: (vmId: number) => Promise<Vm>;
     create: (input: VmInput) => Promise<Vm>;
+    action: (vmId: number, action: "start" | "stop") => Promise<Vm>;
+    remove: (vmId: number) => Promise<void>;
     templates: () => Promise<VmTemplate[]>;
     requests: () => Promise<ProvisioningRequest[]>;
+    requestsForVm: (vmId: number) => Promise<ProvisioningRequest[]>;
     requeueRequest: (requestId: number) => Promise<ProvisioningRequest>;
   };
 };
@@ -69,6 +73,10 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
@@ -248,6 +256,13 @@ function mockClient(): ApiClient {
       async list() {
         return mockDb.vms;
       },
+      async get(vmId) {
+        const vm = mockDb.vms.find((entry) => entry.id === vmId);
+        if (!vm) {
+          throw new Error("VM not found");
+        }
+        return vm;
+      },
       async create(input) {
         const vm: Vm = {
           id: Date.now(),
@@ -264,10 +279,27 @@ function mockClient(): ApiClient {
         mockDb.vms.unshift(vm);
         return vm;
       },
+      async action(vmId, action) {
+        const vm = mockDb.vms.find((entry) => entry.id === vmId);
+        if (!vm) {
+          throw new Error("VM not found");
+        }
+        vm.status = action === "start" ? "running" : "stopped";
+        return vm;
+      },
+      async remove(vmId) {
+        const index = mockDb.vms.findIndex((entry) => entry.id === vmId);
+        if (index >= 0) {
+          mockDb.vms.splice(index, 1);
+        }
+      },
       async templates() {
         return mockDb.templates;
       },
       async requests() {
+        return [];
+      },
+      async requestsForVm() {
         return [];
       },
       async requeueRequest(requestId) {
@@ -354,6 +386,10 @@ function httpClient(): ApiClient {
         const vms = await requestJson<Array<Record<string, unknown>>>("/vms");
         return vms.map(normalizeVm);
       },
+      get: async (vmId) => {
+        const vm = await requestJson<Record<string, unknown>>(`/vms/${vmId}`);
+        return normalizeVm(vm);
+      },
       create: (input) =>
         requestJson<Record<string, unknown>>("/vms", {
           method: "POST",
@@ -375,12 +411,27 @@ function httpClient(): ApiClient {
             ipv4_gateway: input.ipv4Gateway || undefined,
           }),
         }).then(normalizeVm),
+      action: async (vmId, action) => {
+        const vm = await requestJson<Record<string, unknown>>(`/vms/${vmId}/actions/${action}`, {
+          method: "POST",
+        });
+        return normalizeVm(vm);
+      },
+      remove: async (vmId) => {
+        await requestJson(`/vms/${vmId}`, {
+          method: "DELETE",
+        });
+      },
       templates: async () => {
         const templates = await requestJson<Array<Record<string, unknown>>>("/vms/templates");
         return templates.map(normalizeTemplate);
       },
       requests: async () => {
         const requests = await requestJson<Array<Record<string, unknown>>>("/vms/requests");
+        return requests.map(normalizeProvisioningRequest);
+      },
+      requestsForVm: async (vmId) => {
+        const requests = await requestJson<Array<Record<string, unknown>>>(`/vms/${vmId}/requests`);
         return requests.map(normalizeProvisioningRequest);
       },
       requeueRequest: async (requestId) => {

@@ -1,13 +1,14 @@
 from sqlalchemy import select
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
 from app.models.domain import ProvisioningRequest, User, VmInstance, VmTemplate
-from app.schemas.vms import ProvisioningRequestRead, VmCreate, VmRead, VmTemplateRead
+from app.schemas.vms import ProvisioningRequestRead, VmAction, VmCreate, VmRead, VmTemplateRead
 from app.services.auth import get_allowed_tenant_ids, get_current_user
 from app.services.bootstrap import ensure_vm_templates
 from app.services.provisioning import create_vm_request
+from app.services.vm_lifecycle import delete_vm, get_vm_for_actor, start_vm, stop_vm
 
 
 router = APIRouter()
@@ -74,3 +75,53 @@ def list_requests(db: Session = Depends(get_db), current_user: User = Depends(ge
     if current_user.role.value != "admin":
         query = query.where(ProvisioningRequest.requested_by_user_id == current_user.id)
     return db.scalars(query).all()
+
+
+@router.get("/{vm_id}", response_model=VmRead)
+def get_vm(
+    vm_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> VmInstance:
+    return get_vm_for_actor(db, vm_id=vm_id, actor=current_user)
+
+
+@router.get("/{vm_id}/requests", response_model=list[ProvisioningRequestRead])
+def list_vm_requests(
+    vm_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ProvisioningRequest]:
+    vm = get_vm_for_actor(db, vm_id=vm_id, actor=current_user)
+    query = (
+        select(ProvisioningRequest)
+        .where(ProvisioningRequest.vm_instance_id == vm.id)
+        .order_by(ProvisioningRequest.created_at.desc())
+    )
+    return db.scalars(query).all()
+
+
+@router.post("/{vm_id}/actions/{action}", response_model=VmRead)
+def run_vm_action(
+    vm_id: int,
+    action: VmAction,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> VmInstance:
+    vm = get_vm_for_actor(db, vm_id=vm_id, actor=current_user)
+    if action == VmAction.START:
+        return start_vm(db, vm=vm, actor=current_user)
+    if action == VmAction.STOP:
+        return stop_vm(db, vm=vm, actor=current_user)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported action")
+
+
+@router.delete("/{vm_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_vm(
+    vm_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    vm = get_vm_for_actor(db, vm_id=vm_id, actor=current_user)
+    delete_vm(db, vm=vm, actor=current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
