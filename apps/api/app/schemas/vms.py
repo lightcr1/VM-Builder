@@ -22,14 +22,47 @@ class VmTemplateRead(ORMModel):
     image_ref: str
 
 
+class VmPackageRead(BaseModel):
+    id: str
+    name: str
+    description: str
+    cpu_cores: int
+    memory_mb: int
+    disk_gb: int
+    badge: str
+    sort_order: int = 100
+    is_active: bool = True
+
+
+class VmPackageCreate(BaseModel):
+    id: str = Field(min_length=2, max_length=80, pattern="^[a-z0-9][a-z0-9-]*$")
+    name: str = Field(min_length=2, max_length=120)
+    description: str = ""
+    cpu_cores: int = Field(ge=1)
+    memory_mb: int = Field(ge=256)
+    disk_gb: int = Field(ge=1)
+    badge: str = Field(default="", max_length=80)
+    sort_order: int = 100
+    is_active: bool = True
+
+
+class VmPackageUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str = ""
+    cpu_cores: int = Field(ge=1)
+    memory_mb: int = Field(ge=256)
+    disk_gb: int = Field(ge=1)
+    badge: str = Field(default="", max_length=80)
+    sort_order: int = 100
+    is_active: bool = True
+
+
 class VmCreate(BaseModel):
     name: str
     description: str = ""
     template_id: int
     tenant_id: int
-    cpu_cores: int | None = Field(default=None, ge=1, le=64)
-    memory_mb: int | None = Field(default=None, ge=512, le=262144)
-    disk_gb: int | None = Field(default=None, ge=5, le=4096)
+    package_id: str = "cloud-m"
     start_on_create: bool = False
     cloud_init_user: str | None = None
     ssh_public_key: str | None = None
@@ -45,6 +78,10 @@ class VmRead(ORMModel):
     name: str
     description: str
     status: VmStatus
+    package_id: str
+    cpu_cores: int
+    memory_mb: int
+    disk_gb: int
     provider_name: str
     provider_vm_id: str | None
     created_at: datetime

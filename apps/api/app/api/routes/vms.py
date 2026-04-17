@@ -4,11 +4,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
 from app.models.domain import ProvisioningRequest, User, VmInstance, VmTemplate
-from app.schemas.vms import ProvisioningRequestRead, VmAction, VmCreate, VmRead, VmTemplateRead
+from app.schemas.vms import ProvisioningRequestRead, VmAction, VmCreate, VmPackageRead, VmRead, VmTemplateRead
 from app.services.auth import get_allowed_tenant_ids, get_current_user
 from app.services.bootstrap import ensure_vm_templates
 from app.services.provisioning import create_vm_request
 from app.services.vm_lifecycle import delete_vm, get_vm_for_actor, start_vm, stop_vm
+from app.services.vm_packages import get_vm_package, list_vm_packages, package_to_read
 
 
 router = APIRouter()
@@ -18,6 +19,11 @@ router = APIRouter()
 def list_templates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VmTemplate]:
     ensure_vm_templates(db)
     return db.scalars(select(VmTemplate).order_by(VmTemplate.name.asc())).all()
+
+
+@router.get("/packages", response_model=list[VmPackageRead])
+def list_packages(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[VmPackageRead]:
+    return [package_to_read(vm_package) for vm_package in list_vm_packages(db)]
 
 
 @router.get("", response_model=list[VmRead])
@@ -43,6 +49,7 @@ def create_vm(
     if not template:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
+    vm_package = get_vm_package(db, payload.package_id)
     vm = create_vm_request(
         db,
         actor=current_user,
@@ -50,9 +57,10 @@ def create_vm(
         description=payload.description,
         template=template,
         tenant_id=payload.tenant_id,
-        cpu_cores=payload.cpu_cores,
-        memory_mb=payload.memory_mb,
-        disk_gb=payload.disk_gb,
+        package_id=vm_package.public_id,
+        cpu_cores=vm_package.cpu_cores,
+        memory_mb=vm_package.memory_mb,
+        disk_gb=vm_package.disk_gb,
         start_on_create=payload.start_on_create,
         cloud_init_user=payload.cloud_init_user,
         ssh_public_key=payload.ssh_public_key,

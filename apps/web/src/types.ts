@@ -13,6 +13,10 @@ export type Tenant = {
   id: number;
   name: string;
   slug: string;
+  maxVms: number;
+  maxCpuCores: number;
+  maxMemoryMb: number;
+  maxDiskGb: number;
 };
 
 export type VmTemplate = {
@@ -22,6 +26,18 @@ export type VmTemplate = {
   memoryMb: number;
   diskGb: number;
   imageRef: string;
+};
+
+export type VmPackage = {
+  id: string;
+  name: string;
+  description: string;
+  cpuCores: number;
+  memoryMb: number;
+  diskGb: number;
+  badge: string;
+  sortOrder: number;
+  isActive: boolean;
 };
 
 export type VmStatus = "requested" | "provisioning" | "running" | "stopped" | "error";
@@ -34,6 +50,10 @@ export type Vm = {
   tenant: Tenant;
   owner: User;
   template: VmTemplate;
+  packageId: string;
+  cpuCores: number;
+  memoryMb: number;
+  diskGb: number;
   status: VmStatus;
   createdAt: string;
   providerName: string;

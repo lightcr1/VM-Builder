@@ -91,9 +91,6 @@ class ProxmoxComputeProvider(ComputeProvider):
         )
         self._wait_for_task(config_task)
 
-        if request.disk_gb > settings.proxmox_template_vmid:
-            pass
-
         resize_task = self._maybe_resize_disk(request)
         if resize_task:
             self._wait_for_task(resize_task)

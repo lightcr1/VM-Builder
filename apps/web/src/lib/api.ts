@@ -1,13 +1,11 @@
-import type { AuditEvent, Me, ProvisioningRequest, Session, Tenant, User, Vm, VmStatus, VmTemplate } from "@/types";
+import type { AuditEvent, Me, ProvisioningRequest, Session, Tenant, User, Vm, VmPackage, VmStatus, VmTemplate } from "@/types";
 
 export type VmInput = {
   name: string;
   description: string;
   templateId: number;
   tenantId: number;
-  cpuCores?: number | null;
-  memoryMb?: number | null;
-  diskGb?: number | null;
+  packageId: string;
   startOnCreate?: boolean;
   cloudInitUser?: string;
   sshPublicKey?: string;
@@ -27,7 +25,8 @@ type ApiClient = {
   tenants: {
     list: () => Promise<Tenant[]>;
     listAll: () => Promise<Tenant[]>;
-    create: (input: { name: string; slug: string }) => Promise<Tenant>;
+    create: (input: TenantQuotaInput & { name: string; slug: string }) => Promise<Tenant>;
+    updateQuotas: (tenantId: number, input: TenantQuotaInput) => Promise<Tenant>;
   };
   users: {
     list: () => Promise<User[]>;
@@ -49,11 +48,38 @@ type ApiClient = {
     action: (vmId: number, action: "start" | "stop") => Promise<Vm>;
     remove: (vmId: number) => Promise<void>;
     templates: () => Promise<VmTemplate[]>;
+    packages: () => Promise<VmPackage[]>;
     requests: () => Promise<ProvisioningRequest[]>;
     requestsForVm: (vmId: number) => Promise<ProvisioningRequest[]>;
     requeueRequest: (requestId: number) => Promise<ProvisioningRequest>;
   };
+  packages: {
+    listAll: () => Promise<VmPackage[]>;
+    create: (input: VmPackageInput) => Promise<VmPackage>;
+    update: (packageId: string, input: VmPackageUpdateInput) => Promise<VmPackage>;
+  };
 };
+
+export type TenantQuotaInput = {
+  maxVms: number;
+  maxCpuCores: number;
+  maxMemoryMb: number;
+  maxDiskGb: number;
+};
+
+export type VmPackageInput = {
+  id: string;
+  name: string;
+  description: string;
+  cpuCores: number;
+  memoryMb: number;
+  diskGb: number;
+  badge: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type VmPackageUpdateInput = Omit<VmPackageInput, "id">;
 
 const sessionKey = "vm-builder.session";
 const tokenKey = "vm-builder.token";
@@ -102,8 +128,8 @@ const mockUsers: User[] = [
   ];
 
 const mockTenants: Tenant[] = [
-    { id: 1, name: "Core Systems", slug: "core" },
-    { id: 2, name: "Edge Lab", slug: "edge" },
+    { id: 1, name: "Core Systems", slug: "core", maxVms: 10, maxCpuCores: 16, maxMemoryMb: 32768, maxDiskGb: 500 },
+    { id: 2, name: "Edge Lab", slug: "edge", maxVms: 5, maxCpuCores: 8, maxMemoryMb: 16384, maxDiskGb: 250 },
   ];
 
 const mockTemplates: VmTemplate[] = [
@@ -111,12 +137,19 @@ const mockTemplates: VmTemplate[] = [
     { id: 2, name: "Ubuntu Medium", cpuCores: 4, memoryMb: 4096, diskGb: 40, imageRef: "ubuntu-24.04-cloudinit" },
   ];
 
+const mockPackages: VmPackage[] = [
+    { id: "cloud-s", name: "Cloud S", description: "Small services, test systems and lightweight web apps.", cpuCores: 2, memoryMb: 1024, diskGb: 30, badge: "Starter", sortOrder: 10, isActive: true },
+    { id: "cloud-m", name: "Cloud M", description: "Default choice for application servers and small databases.", cpuCores: 2, memoryMb: 2048, diskGb: 50, badge: "Popular", sortOrder: 20, isActive: true },
+    { id: "cloud-l", name: "Cloud L", description: "More memory and storage for heavier tenant workloads.", cpuCores: 4, memoryMb: 4096, diskGb: 80, badge: "Growth", sortOrder: 30, isActive: true },
+    { id: "cloud-xl", name: "Cloud XL", description: "Bigger application nodes, build workers and staging stacks.", cpuCores: 4, memoryMb: 8192, diskGb: 120, badge: "Performance", sortOrder: 40, isActive: true },
+  ];
+
 const mockVms: Vm[] = [
     {
       id: 1,
       name: "web-prod-01",
       description: "Frontend node",
-      tenant: { id: 1, name: "Core Systems", slug: "core" },
+      tenant: mockTenants[0],
       owner: {
         id: 2,
         fullName: "Noah Weber",
@@ -126,6 +159,10 @@ const mockVms: Vm[] = [
         isActive: true,
       },
       template: { id: 1, name: "Ubuntu Small", cpuCores: 2, memoryMb: 2048, diskGb: 20, imageRef: "ubuntu-24.04-cloudinit" },
+      packageId: "cloud-m",
+      cpuCores: 2,
+      memoryMb: 2048,
+      diskGb: 50,
       status: "running" as VmStatus,
       createdAt: "2026-03-28T08:15:00Z",
       providerName: "mock-proxmox",
@@ -135,7 +172,7 @@ const mockVms: Vm[] = [
       id: 2,
       name: "db-stage-01",
       description: "Database staging node",
-      tenant: { id: 2, name: "Edge Lab", slug: "edge" },
+      tenant: mockTenants[1],
       owner: {
         id: 1,
         fullName: "Ava Keller",
@@ -145,6 +182,10 @@ const mockVms: Vm[] = [
         isActive: true,
       },
       template: { id: 2, name: "Ubuntu Medium", cpuCores: 4, memoryMb: 4096, diskGb: 40, imageRef: "ubuntu-24.04-cloudinit" },
+      packageId: "cloud-l",
+      cpuCores: 4,
+      memoryMb: 4096,
+      diskGb: 80,
       status: "stopped" as VmStatus,
       createdAt: "2026-03-29T12:10:00Z",
       providerName: "mock-proxmox",
@@ -156,6 +197,7 @@ const mockDb = {
   users: mockUsers,
   tenants: mockTenants,
   templates: mockTemplates,
+  packages: mockPackages,
   vms: mockVms,
 };
 
@@ -215,8 +257,20 @@ function mockClient(): ApiClient {
           id: Date.now(),
           name: input.name,
           slug: input.slug,
+          maxVms: input.maxVms,
+          maxCpuCores: input.maxCpuCores,
+          maxMemoryMb: input.maxMemoryMb,
+          maxDiskGb: input.maxDiskGb,
         };
         mockDb.tenants.unshift(tenant);
+        return tenant;
+      },
+      async updateQuotas(tenantId, input) {
+        const tenant = mockDb.tenants.find((entry) => entry.id === tenantId);
+        if (!tenant) {
+          throw new Error("Tenant not found");
+        }
+        Object.assign(tenant, input);
         return tenant;
       },
     },
@@ -271,6 +325,10 @@ function mockClient(): ApiClient {
           tenant: mockDb.tenants.find((tenant) => tenant.id === input.tenantId) ?? mockDb.tenants[0],
           owner: readStoredSession()?.user ?? mockDb.users[0],
           template: mockDb.templates.find((template) => template.id === input.templateId) ?? mockDb.templates[0],
+          packageId: input.packageId,
+          cpuCores: mockDb.packages.find((entry) => entry.id === input.packageId)?.cpuCores ?? 2,
+          memoryMb: mockDb.packages.find((entry) => entry.id === input.packageId)?.memoryMb ?? 2048,
+          diskGb: mockDb.packages.find((entry) => entry.id === input.packageId)?.diskGb ?? 50,
           status: "provisioning",
           createdAt: new Date().toISOString(),
           providerName: "mock-proxmox",
@@ -296,6 +354,9 @@ function mockClient(): ApiClient {
       async templates() {
         return mockDb.templates;
       },
+      async packages() {
+        return mockDb.packages.filter((entry) => entry.isActive);
+      },
       async requests() {
         return [];
       },
@@ -310,6 +371,26 @@ function mockClient(): ApiClient {
           createdAt: new Date().toISOString(),
           vmInstanceId: 1,
         };
+      },
+    },
+    packages: {
+      async listAll() {
+        return mockDb.packages;
+      },
+      async create(input) {
+        const vmPackage: VmPackage = { ...input };
+        mockDb.packages.push(vmPackage);
+        mockDb.packages.sort((left, right) => left.sortOrder - right.sortOrder);
+        return vmPackage;
+      },
+      async update(packageId, input) {
+        const vmPackage = mockDb.packages.find((entry) => entry.id === packageId);
+        if (!vmPackage) {
+          throw new Error("Package not found");
+        }
+        Object.assign(vmPackage, input);
+        mockDb.packages.sort((left, right) => left.sortOrder - right.sortOrder);
+        return vmPackage;
       },
     },
   };
@@ -351,7 +432,26 @@ function httpClient(): ApiClient {
       create: async (input) => {
         const tenant = await requestJson<Record<string, unknown>>("/admin/tenants", {
           method: "POST",
-          body: JSON.stringify(input),
+          body: JSON.stringify({
+            name: input.name,
+            slug: input.slug,
+            max_vms: input.maxVms,
+            max_cpu_cores: input.maxCpuCores,
+            max_memory_mb: input.maxMemoryMb,
+            max_disk_gb: input.maxDiskGb,
+          }),
+        });
+        return normalizeTenant(tenant);
+      },
+      updateQuotas: async (tenantId, input) => {
+        const tenant = await requestJson<Record<string, unknown>>(`/admin/tenants/${tenantId}/quotas`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            max_vms: input.maxVms,
+            max_cpu_cores: input.maxCpuCores,
+            max_memory_mb: input.maxMemoryMb,
+            max_disk_gb: input.maxDiskGb,
+          }),
         });
         return normalizeTenant(tenant);
       },
@@ -398,9 +498,7 @@ function httpClient(): ApiClient {
             description: input.description,
             template_id: input.templateId,
             tenant_id: input.tenantId,
-            cpu_cores: input.cpuCores || undefined,
-            memory_mb: input.memoryMb || undefined,
-            disk_gb: input.diskGb || undefined,
+            package_id: input.packageId,
             start_on_create: input.startOnCreate ?? false,
             cloud_init_user: input.cloudInitUser || undefined,
             ssh_public_key: input.sshPublicKey || undefined,
@@ -426,6 +524,10 @@ function httpClient(): ApiClient {
         const templates = await requestJson<Array<Record<string, unknown>>>("/vms/templates");
         return templates.map(normalizeTemplate);
       },
+      packages: async () => {
+        const packages = await requestJson<Array<Record<string, unknown>>>("/vms/packages");
+        return packages.map(normalizePackage);
+      },
       requests: async () => {
         const requests = await requestJson<Array<Record<string, unknown>>>("/vms/requests");
         return requests.map(normalizeProvisioningRequest);
@@ -439,6 +541,26 @@ function httpClient(): ApiClient {
           method: "POST",
         });
         return normalizeProvisioningRequest(request);
+      },
+    },
+    packages: {
+      listAll: async () => {
+        const packages = await requestJson<Array<Record<string, unknown>>>("/admin/vm-packages");
+        return packages.map(normalizePackage);
+      },
+      create: async (input) => {
+        const vmPackage = await requestJson<Record<string, unknown>>("/admin/vm-packages", {
+          method: "POST",
+          body: JSON.stringify(packageToApiPayload(input)),
+        });
+        return normalizePackage(vmPackage);
+      },
+      update: async (packageId, input) => {
+        const vmPackage = await requestJson<Record<string, unknown>>(`/admin/vm-packages/${packageId}`, {
+          method: "PATCH",
+          body: JSON.stringify(packageToApiPayload(input)),
+        });
+        return normalizePackage(vmPackage);
       },
     },
   };
@@ -480,11 +602,43 @@ function normalizeTemplate(payload: Record<string, unknown>): VmTemplate {
   };
 }
 
+function normalizePackage(payload: Record<string, unknown>): VmPackage {
+  return {
+    id: String(payload.id ?? ""),
+    name: String(payload.name ?? ""),
+    description: String(payload.description ?? ""),
+    cpuCores: Number(payload.cpu_cores ?? payload.cpuCores ?? 0),
+    memoryMb: Number(payload.memory_mb ?? payload.memoryMb ?? 0),
+    diskGb: Number(payload.disk_gb ?? payload.diskGb ?? 0),
+    badge: String(payload.badge ?? ""),
+    sortOrder: Number(payload.sort_order ?? payload.sortOrder ?? 100),
+    isActive: Boolean(payload.is_active ?? payload.isActive ?? false),
+  };
+}
+
+function packageToApiPayload(input: VmPackageInput | VmPackageUpdateInput): Record<string, unknown> {
+  return {
+    ...("id" in input ? { id: input.id } : {}),
+    name: input.name,
+    description: input.description,
+    cpu_cores: input.cpuCores,
+    memory_mb: input.memoryMb,
+    disk_gb: input.diskGb,
+    badge: input.badge,
+    sort_order: input.sortOrder,
+    is_active: input.isActive,
+  };
+}
+
 function normalizeTenant(payload: Record<string, unknown>): Tenant {
   return {
     id: Number(payload.id),
     name: String(payload.name ?? ""),
     slug: String(payload.slug ?? ""),
+    maxVms: Number(payload.max_vms ?? payload.maxVms ?? 0),
+    maxCpuCores: Number(payload.max_cpu_cores ?? payload.maxCpuCores ?? 0),
+    maxMemoryMb: Number(payload.max_memory_mb ?? payload.maxMemoryMb ?? 0),
+    maxDiskGb: Number(payload.max_disk_gb ?? payload.maxDiskGb ?? 0),
   };
 }
 
@@ -500,6 +654,10 @@ function normalizeVm(payload: Record<string, unknown>): Vm {
     tenant: normalizeTenant(payload.tenant as Record<string, unknown>),
     owner: normalizeUser(payload.owner as Record<string, unknown>),
     template: normalizeTemplate(payload.template as Record<string, unknown>),
+    packageId: String(payload.package_id ?? payload.packageId ?? ""),
+    cpuCores: Number(payload.cpu_cores ?? payload.cpuCores ?? 0),
+    memoryMb: Number(payload.memory_mb ?? payload.memoryMb ?? 0),
+    diskGb: Number(payload.disk_gb ?? payload.diskGb ?? 0),
   };
 }
 
