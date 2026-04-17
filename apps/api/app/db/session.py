@@ -7,10 +7,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.models.domain import Membership, Role, Tenant, User
 from app.services.bootstrap import ensure_vm_templates
-<<<<<<< HEAD
 from app.services.vm_packages import ensure_vm_packages
-=======
->>>>>>> origin/main
 
 
 engine = create_engine(settings.database_url, future=True)
@@ -49,7 +46,4 @@ def create_db_and_seed() -> None:
             )
             db.commit()
         ensure_vm_templates(db)
-<<<<<<< HEAD
         ensure_vm_packages(db)
-=======
->>>>>>> origin/main

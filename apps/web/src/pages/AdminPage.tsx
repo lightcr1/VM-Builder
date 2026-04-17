@@ -1,11 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "@/lib/api";
 import { RequestStatusPill } from "@/components/RequestStatusPill";
-<<<<<<< HEAD
 import type { AuditEvent, ProvisioningRequest, Tenant, User, VmPackage } from "@/types";
-=======
-import type { AuditEvent, ProvisioningRequest, Tenant, User } from "@/types";
->>>>>>> origin/main
 import { SectionHeader } from "@/components/SectionHeader";
 
 export function AdminPage() {
@@ -13,7 +9,6 @@ export function AdminPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [requests, setRequests] = useState<ProvisioningRequest[]>([]);
-<<<<<<< HEAD
   const [packages, setPackages] = useState<VmPackage[]>([]);
   const [tenantForm, setTenantForm] = useState({
     name: "",
@@ -26,9 +21,6 @@ export function AdminPage() {
   const [quotaForms, setQuotaForms] = useState<Record<number, TenantQuotaForm>>({});
   const [packageForm, setPackageForm] = useState<PackageForm>(defaultPackageForm());
   const [packageForms, setPackageForms] = useState<Record<string, PackageForm>>({});
-=======
-  const [tenantForm, setTenantForm] = useState({ name: "", slug: "" });
->>>>>>> origin/main
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -42,30 +34,20 @@ export function AdminPage() {
   const latestFirewallGuardrail = firewallGuardrails[0];
 
   async function loadAdminData() {
-<<<<<<< HEAD
     const [userList, tenantList, events, packageList] = await Promise.all([
       api.users.list(),
       api.tenants.listAll(),
       api.audit.list(),
       api.packages.listAll(),
-=======
-    const [userList, tenantList, events] = await Promise.all([
-      api.users.list(),
-      api.tenants.listAll(),
-      api.audit.list(),
->>>>>>> origin/main
     ]);
     const requestList = await api.vms.requests();
     setUsers(userList);
     setTenants(tenantList);
     setAuditEvents(events);
     setRequests(requestList);
-<<<<<<< HEAD
     setPackages(packageList);
     setQuotaForms(Object.fromEntries(tenantList.map((tenant) => [tenant.id, tenantToQuotaForm(tenant)])));
     setPackageForms(Object.fromEntries(packageList.map((vmPackage) => [vmPackage.id, packageToForm(vmPackage)])));
-=======
->>>>>>> origin/main
     setUserForm((current) => ({
       ...current,
       tenantId: current.tenantId || tenantList[0]?.id || 0,
@@ -83,16 +65,11 @@ export function AdminPage() {
   async function handleTenantCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await api.tenants.create(tenantForm);
-<<<<<<< HEAD
     setTenantForm({ name: "", slug: "", maxVms: 10, maxCpuCores: 16, maxMemoryMb: 32768, maxDiskGb: 500 });
-=======
-    setTenantForm({ name: "", slug: "" });
->>>>>>> origin/main
     setMessage("Tenant created.");
     await loadAdminData();
   }
 
-<<<<<<< HEAD
   async function handleTenantQuotaUpdate(event: FormEvent<HTMLFormElement>, tenantId: number) {
     event.preventDefault();
     const form = quotaForms[tenantId];
@@ -128,8 +105,6 @@ export function AdminPage() {
     await loadAdminData();
   }
 
-=======
->>>>>>> origin/main
   async function handleUserCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await api.users.create(userForm);
@@ -189,13 +164,10 @@ export function AdminPage() {
           <span>Failed jobs</span>
           <strong>{requests.filter((request) => request.status === "failed").length}</strong>
         </div>
-<<<<<<< HEAD
         <div>
           <span>Packages</span>
           <strong>{packages.filter((vmPackage) => vmPackage.isActive).length}</strong>
         </div>
-=======
->>>>>>> origin/main
       </div>
 
       <section className="surface">
@@ -238,7 +210,6 @@ export function AdminPage() {
                 placeholder="edge-lab"
               />
             </label>
-<<<<<<< HEAD
             <label>
               VM limit
               <input
@@ -275,8 +246,6 @@ export function AdminPage() {
                 onChange={(event) => setTenantForm({ ...tenantForm, maxDiskGb: Number(event.target.value) })}
               />
             </label>
-=======
->>>>>>> origin/main
             <button className="primary-button" type="submit">
               Create tenant
             </button>
@@ -380,12 +349,8 @@ export function AdminPage() {
                   <span>{tenant.slug}</span>
                 </div>
                 <div>
-<<<<<<< HEAD
                   <span>{tenant.maxVms} VMs</span>
                   <span>{tenant.maxCpuCores} cores · {Math.round(tenant.maxMemoryMb / 1024)} GB RAM · {tenant.maxDiskGb} GB disk</span>
-=======
-                  <span>active</span>
->>>>>>> origin/main
                 </div>
               </article>
             ))}
@@ -395,7 +360,6 @@ export function AdminPage() {
 
       <section className="surface">
         <div className="table-header">
-<<<<<<< HEAD
           <p>Tenant quotas</p>
           <span>Hard limits enforced by the API before a VM request is accepted.</span>
         </div>
@@ -633,8 +597,6 @@ export function AdminPage() {
 
       <section className="surface">
         <div className="table-header">
-=======
->>>>>>> origin/main
           <p>Provisioning failures</p>
           <span>Failed jobs can be requeued after config or provider issues are fixed.</span>
         </div>
@@ -720,7 +682,6 @@ function extractFirewallGuardrail(payload: string): { group?: string; enabled?: 
     return null;
   }
 }
-<<<<<<< HEAD
 
 type TenantQuotaForm = {
   maxVms: string;
@@ -829,5 +790,3 @@ function updatePackageForm(
     },
   };
 }
-=======
->>>>>>> origin/main

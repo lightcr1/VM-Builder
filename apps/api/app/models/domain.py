@@ -33,13 +33,10 @@ class Tenant(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
     slug: Mapped[str] = mapped_column(String(120), unique=True)
-<<<<<<< HEAD
     max_vms: Mapped[int] = mapped_column(Integer, default=10)
     max_cpu_cores: Mapped[int] = mapped_column(Integer, default=16)
     max_memory_mb: Mapped[int] = mapped_column(Integer, default=32768)
     max_disk_gb: Mapped[int] = mapped_column(Integer, default=500)
-=======
->>>>>>> origin/main
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -82,7 +79,6 @@ class VmTemplate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-<<<<<<< HEAD
 class VmPackage(Base):
     __tablename__ = "vm_packages"
 
@@ -99,8 +95,6 @@ class VmPackage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-=======
->>>>>>> origin/main
 class VmInstance(Base):
     __tablename__ = "vm_instances"
 
@@ -110,13 +104,10 @@ class VmInstance(Base):
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     template_id: Mapped[int] = mapped_column(ForeignKey("vm_templates.id"))
-<<<<<<< HEAD
     package_id: Mapped[str] = mapped_column(String(80), default="custom")
     cpu_cores: Mapped[int] = mapped_column(Integer, default=2)
     memory_mb: Mapped[int] = mapped_column(Integer, default=2048)
     disk_gb: Mapped[int] = mapped_column(Integer, default=20)
-=======
->>>>>>> origin/main
     status: Mapped[VmStatus] = mapped_column(Enum(VmStatus), default=VmStatus.REQUESTED)
     provider_name: Mapped[str] = mapped_column(String(50), default="mock-proxmox")
     provider_vm_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -151,7 +142,3 @@ class AuditEvent(Base):
     entity_id: Mapped[str] = mapped_column(String(120))
     details: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
