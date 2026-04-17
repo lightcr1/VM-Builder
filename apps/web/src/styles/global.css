@@ -607,7 +607,6 @@ a:focus-visible {
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
 }
 
-<<<<<<< HEAD
 .quota-row {
   grid-template-columns: minmax(180px, 1.2fr) repeat(4, minmax(96px, 0.55fr)) auto;
 }
@@ -669,8 +668,6 @@ a:focus-visible {
   align-content: center;
 }
 
-=======
->>>>>>> origin/main
 .vm-grid-row {
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
 }

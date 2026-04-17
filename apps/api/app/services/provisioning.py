@@ -2,21 +2,13 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-<<<<<<< HEAD
 from sqlalchemy import func, select
-=======
-from sqlalchemy import select
->>>>>>> origin/main
 from sqlalchemy.orm import Session
 from rq import Retry
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-<<<<<<< HEAD
 from app.models.domain import Membership, ProvisioningRequest, RequestStatus, Role, Tenant, User, VmInstance, VmStatus, VmTemplate
-=======
-from app.models.domain import Membership, ProvisioningRequest, RequestStatus, Role, User, VmInstance, VmStatus, VmTemplate
->>>>>>> origin/main
 from app.providers.compute.base import ComputeVmRequest
 from app.providers.compute.factory import get_compute_provider
 from app.services.audit import write_audit_event
@@ -31,10 +23,7 @@ def create_vm_request(
     description: str,
     template: VmTemplate,
     tenant_id: int,
-<<<<<<< HEAD
     package_id: str = "custom",
-=======
->>>>>>> origin/main
     cpu_cores: int | None = None,
     memory_mb: int | None = None,
     disk_gb: int | None = None,
@@ -54,7 +43,6 @@ def create_vm_request(
     requested_cpu_cores = cpu_cores or template.cpu_cores
     requested_memory_mb = memory_mb or template.memory_mb
     requested_disk_gb = disk_gb or template.disk_gb
-<<<<<<< HEAD
     _ensure_tenant_quota(
         db,
         tenant_id=tenant_id,
@@ -62,8 +50,6 @@ def create_vm_request(
         requested_memory_mb=requested_memory_mb,
         requested_disk_gb=requested_disk_gb,
     )
-=======
->>>>>>> origin/main
 
     vm = VmInstance(
         name=name,
@@ -71,13 +57,10 @@ def create_vm_request(
         owner_user_id=actor.id,
         tenant_id=tenant_id,
         template_id=template.id,
-<<<<<<< HEAD
         package_id=package_id,
         cpu_cores=requested_cpu_cores,
         memory_mb=requested_memory_mb,
         disk_gb=requested_disk_gb,
-=======
->>>>>>> origin/main
         status=VmStatus.REQUESTED,
         provider_name="proxmox" if _is_proxmox_enabled() else "mock-proxmox",
     )
@@ -286,7 +269,6 @@ def _is_proxmox_enabled() -> bool:
     return settings.proxmox_enabled
 
 
-<<<<<<< HEAD
 def _ensure_tenant_quota(
     db: Session,
     *,
@@ -330,8 +312,6 @@ def _ensure_tenant_quota(
         )
 
 
-=======
->>>>>>> origin/main
 def _dispatch_provisioning_job(request_id: int) -> None:
     if settings.provisioning_mode == "inline":
         process_provisioning_request(request_id)

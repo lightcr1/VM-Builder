@@ -16,12 +16,8 @@ EXPECTED_TABLES = {
     "vm_instances",
     "vm_templates",
 }
-<<<<<<< HEAD
 BASELINE_REVISION = "20260402_0001"
 HEAD_REVISION = "20260416_0003"
-=======
-HEAD_REVISION = "20260402_0001"
->>>>>>> origin/main
 
 
 def run_migrations() -> None:
@@ -44,11 +40,7 @@ def _stamp_existing_schema_if_needed(config: Config) -> None:
         if EXPECTED_TABLES.issubset(tables):
             connection.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"))
             connection.execute(text("DELETE FROM alembic_version"))
-<<<<<<< HEAD
             connection.execute(text("INSERT INTO alembic_version (version_num) VALUES (:version)"), {"version": BASELINE_REVISION})
-=======
-            connection.execute(text("INSERT INTO alembic_version (version_num) VALUES (:version)"), {"version": HEAD_REVISION})
->>>>>>> origin/main
 
 
 def _schema_is_at_head() -> bool:
