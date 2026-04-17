@@ -1,5 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, type VmInput } from "@/lib/api";
+<<<<<<< HEAD
+import type { Tenant, VmPackage, VmTemplate } from "@/types";
+import { SectionHeader } from "@/components/SectionHeader";
+
+export function VmCreatePage() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [templates, setTemplates] = useState<VmTemplate[]>([]);
+  const [packages, setPackages] = useState<VmPackage[]>([]);
+  const [created, setCreated] = useState<string | null>(null);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [selectedPackageId, setSelectedPackageId] = useState("cloud-m");
+  const selectedPackage = packages.find((plan) => plan.id === selectedPackageId) ?? packages[0];
+=======
 import type { Tenant, VmTemplate } from "@/types";
 import { SectionHeader } from "@/components/SectionHeader";
 
@@ -49,27 +62,48 @@ export function VmCreatePage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedPackageId, setSelectedPackageId] = useState(VM_PACKAGES[1].id);
   const selectedPackage = VM_PACKAGES.find((plan) => plan.id === selectedPackageId) ?? VM_PACKAGES[1];
+>>>>>>> origin/main
   const [form, setForm] = useState<VmInput>({
     name: "",
     description: "",
     templateId: 0,
     tenantId: 0,
+<<<<<<< HEAD
+    packageId: "cloud-m",
+=======
     cpuCores: VM_PACKAGES[1].cpuCores,
     memoryMb: VM_PACKAGES[1].memoryMb,
     diskGb: VM_PACKAGES[1].diskGb,
+>>>>>>> origin/main
     startOnCreate: true,
     ipConfigMode: "dhcp",
   });
 
   useEffect(() => {
+<<<<<<< HEAD
+    void Promise.all([api.tenants.list(), api.vms.templates(), api.vms.packages()]).then(([tenantItems, templateItems, packageItems]) => {
+      setTenants(tenantItems);
+      setTemplates(templateItems);
+      setPackages(packageItems);
+      const defaultPackage = packageItems.find((plan) => plan.id === "cloud-m") ?? packageItems[0];
+=======
     void Promise.all([api.tenants.list(), api.vms.templates()]).then(([tenantItems, templateItems]) => {
       setTenants(tenantItems);
       setTemplates(templateItems);
+>>>>>>> origin/main
       setForm((current) => ({
         ...current,
         tenantId: current.tenantId || tenantItems[0]?.id || 0,
         templateId: current.templateId || templateItems[0]?.id || 0,
+<<<<<<< HEAD
+        packageId: current.packageId || defaultPackage?.id || "cloud-m",
       }));
+      if (defaultPackage) {
+        setSelectedPackageId(defaultPackage.id);
+      }
+=======
+      }));
+>>>>>>> origin/main
     });
   }, []);
 
@@ -77,9 +111,13 @@ export function VmCreatePage() {
     event.preventDefault();
     const vm = await api.vms.create({
       ...form,
+<<<<<<< HEAD
+      packageId: selectedPackage?.id ?? form.packageId,
+=======
       cpuCores: selectedPackage.cpuCores,
       memoryMb: selectedPackage.memoryMb,
       diskGb: selectedPackage.diskGb,
+>>>>>>> origin/main
       ipConfigMode: "dhcp",
       networkBridge: undefined,
       vlanTag: undefined,
@@ -92,6 +130,14 @@ export function VmCreatePage() {
   }
 
   function selectPackage(packageId: string) {
+<<<<<<< HEAD
+    const nextPackage = packages.find((plan) => plan.id === packageId) ?? packages[0];
+    if (!nextPackage) return;
+    setSelectedPackageId(nextPackage.id);
+    setForm((current) => ({
+      ...current,
+      packageId: nextPackage.id,
+=======
     const nextPackage = VM_PACKAGES.find((plan) => plan.id === packageId) ?? VM_PACKAGES[1];
     setSelectedPackageId(nextPackage.id);
     setForm((current) => ({
@@ -99,6 +145,7 @@ export function VmCreatePage() {
       cpuCores: nextPackage.cpuCores,
       memoryMb: nextPackage.memoryMb,
       diskGb: nextPackage.diskGb,
+>>>>>>> origin/main
     }));
   }
 
@@ -185,7 +232,12 @@ export function VmCreatePage() {
             {step === 2 ? (
               <>
                 <div className="package-grid form-span-2">
+<<<<<<< HEAD
+                  {packages.length === 0 ? <p className="empty-state">Packages are loading.</p> : null}
+                  {packages.map((plan) => (
+=======
                   {VM_PACKAGES.map((plan) => (
+>>>>>>> origin/main
                     <button
                       type="button"
                       key={plan.id}
@@ -277,8 +329,14 @@ export function VmCreatePage() {
                     <div className="summary-item">
                       <span>Package</span>
                       <strong>
+<<<<<<< HEAD
+                        {selectedPackage
+                          ? `${selectedPackage.name} · ${selectedPackage.cpuCores} vCPU · ${selectedPackage.memoryMb / 1024} GB RAM · ${selectedPackage.diskGb} GB SSD`
+                          : "No package selected"}
+=======
                         {selectedPackage.name} · {selectedPackage.cpuCores} vCPU · {selectedPackage.memoryMb / 1024} GB RAM ·{" "}
                         {selectedPackage.diskGb} GB SSD
+>>>>>>> origin/main
                       </strong>
                     </div>
                     <div className="summary-item">
@@ -325,8 +383,14 @@ export function VmCreatePage() {
             <div className="summary-item">
               <span>Package</span>
               <strong>
+<<<<<<< HEAD
+                {selectedPackage
+                  ? `${selectedPackage.name} · ${selectedPackage.cpuCores} vCPU · ${selectedPackage.memoryMb / 1024} GB RAM · ${selectedPackage.diskGb} GB SSD`
+                  : "No package selected"}
+=======
                 {selectedPackage.name} · {selectedPackage.cpuCores} vCPU · {selectedPackage.memoryMb / 1024} GB RAM ·{" "}
                 {selectedPackage.diskGb} GB SSD
+>>>>>>> origin/main
               </strong>
             </div>
             <div className="summary-item">

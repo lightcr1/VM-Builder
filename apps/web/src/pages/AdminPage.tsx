@@ -1,7 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "@/lib/api";
 import { RequestStatusPill } from "@/components/RequestStatusPill";
+<<<<<<< HEAD
+import type { AuditEvent, ProvisioningRequest, Tenant, User, VmPackage } from "@/types";
+=======
 import type { AuditEvent, ProvisioningRequest, Tenant, User } from "@/types";
+>>>>>>> origin/main
 import { SectionHeader } from "@/components/SectionHeader";
 
 export function AdminPage() {
@@ -9,7 +13,22 @@ export function AdminPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [requests, setRequests] = useState<ProvisioningRequest[]>([]);
+<<<<<<< HEAD
+  const [packages, setPackages] = useState<VmPackage[]>([]);
+  const [tenantForm, setTenantForm] = useState({
+    name: "",
+    slug: "",
+    maxVms: 10,
+    maxCpuCores: 16,
+    maxMemoryMb: 32768,
+    maxDiskGb: 500,
+  });
+  const [quotaForms, setQuotaForms] = useState<Record<number, TenantQuotaForm>>({});
+  const [packageForm, setPackageForm] = useState<PackageForm>(defaultPackageForm());
+  const [packageForms, setPackageForms] = useState<Record<string, PackageForm>>({});
+=======
   const [tenantForm, setTenantForm] = useState({ name: "", slug: "" });
+>>>>>>> origin/main
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -23,16 +42,30 @@ export function AdminPage() {
   const latestFirewallGuardrail = firewallGuardrails[0];
 
   async function loadAdminData() {
+<<<<<<< HEAD
+    const [userList, tenantList, events, packageList] = await Promise.all([
+      api.users.list(),
+      api.tenants.listAll(),
+      api.audit.list(),
+      api.packages.listAll(),
+=======
     const [userList, tenantList, events] = await Promise.all([
       api.users.list(),
       api.tenants.listAll(),
       api.audit.list(),
+>>>>>>> origin/main
     ]);
     const requestList = await api.vms.requests();
     setUsers(userList);
     setTenants(tenantList);
     setAuditEvents(events);
     setRequests(requestList);
+<<<<<<< HEAD
+    setPackages(packageList);
+    setQuotaForms(Object.fromEntries(tenantList.map((tenant) => [tenant.id, tenantToQuotaForm(tenant)])));
+    setPackageForms(Object.fromEntries(packageList.map((vmPackage) => [vmPackage.id, packageToForm(vmPackage)])));
+=======
+>>>>>>> origin/main
     setUserForm((current) => ({
       ...current,
       tenantId: current.tenantId || tenantList[0]?.id || 0,
@@ -50,11 +83,53 @@ export function AdminPage() {
   async function handleTenantCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await api.tenants.create(tenantForm);
+<<<<<<< HEAD
+    setTenantForm({ name: "", slug: "", maxVms: 10, maxCpuCores: 16, maxMemoryMb: 32768, maxDiskGb: 500 });
+=======
     setTenantForm({ name: "", slug: "" });
+>>>>>>> origin/main
     setMessage("Tenant created.");
     await loadAdminData();
   }
 
+<<<<<<< HEAD
+  async function handleTenantQuotaUpdate(event: FormEvent<HTMLFormElement>, tenantId: number) {
+    event.preventDefault();
+    const form = quotaForms[tenantId];
+    if (!form) {
+      return;
+    }
+    await api.tenants.updateQuotas(tenantId, {
+      maxVms: Number(form.maxVms),
+      maxCpuCores: Number(form.maxCpuCores),
+      maxMemoryMb: Number(form.maxMemoryMb),
+      maxDiskGb: Number(form.maxDiskGb),
+    });
+    setMessage("Tenant quotas updated.");
+    await loadAdminData();
+  }
+
+  async function handlePackageCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await api.packages.create(formToPackageInput(packageForm));
+    setPackageForm(defaultPackageForm());
+    setMessage("VM package created.");
+    await loadAdminData();
+  }
+
+  async function handlePackageUpdate(event: FormEvent<HTMLFormElement>, packageId: string) {
+    event.preventDefault();
+    const form = packageForms[packageId];
+    if (!form) {
+      return;
+    }
+    await api.packages.update(packageId, formToPackageUpdateInput(form));
+    setMessage("VM package updated.");
+    await loadAdminData();
+  }
+
+=======
+>>>>>>> origin/main
   async function handleUserCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await api.users.create(userForm);
@@ -114,6 +189,13 @@ export function AdminPage() {
           <span>Failed jobs</span>
           <strong>{requests.filter((request) => request.status === "failed").length}</strong>
         </div>
+<<<<<<< HEAD
+        <div>
+          <span>Packages</span>
+          <strong>{packages.filter((vmPackage) => vmPackage.isActive).length}</strong>
+        </div>
+=======
+>>>>>>> origin/main
       </div>
 
       <section className="surface">
@@ -156,6 +238,45 @@ export function AdminPage() {
                 placeholder="edge-lab"
               />
             </label>
+<<<<<<< HEAD
+            <label>
+              VM limit
+              <input
+                type="number"
+                min="0"
+                value={tenantForm.maxVms}
+                onChange={(event) => setTenantForm({ ...tenantForm, maxVms: Number(event.target.value) })}
+              />
+            </label>
+            <label>
+              CPU core limit
+              <input
+                type="number"
+                min="0"
+                value={tenantForm.maxCpuCores}
+                onChange={(event) => setTenantForm({ ...tenantForm, maxCpuCores: Number(event.target.value) })}
+              />
+            </label>
+            <label>
+              RAM limit MB
+              <input
+                type="number"
+                min="0"
+                value={tenantForm.maxMemoryMb}
+                onChange={(event) => setTenantForm({ ...tenantForm, maxMemoryMb: Number(event.target.value) })}
+              />
+            </label>
+            <label>
+              Disk limit GB
+              <input
+                type="number"
+                min="0"
+                value={tenantForm.maxDiskGb}
+                onChange={(event) => setTenantForm({ ...tenantForm, maxDiskGb: Number(event.target.value) })}
+              />
+            </label>
+=======
+>>>>>>> origin/main
             <button className="primary-button" type="submit">
               Create tenant
             </button>
@@ -259,7 +380,12 @@ export function AdminPage() {
                   <span>{tenant.slug}</span>
                 </div>
                 <div>
+<<<<<<< HEAD
+                  <span>{tenant.maxVms} VMs</span>
+                  <span>{tenant.maxCpuCores} cores · {Math.round(tenant.maxMemoryMb / 1024)} GB RAM · {tenant.maxDiskGb} GB disk</span>
+=======
                   <span>active</span>
+>>>>>>> origin/main
                 </div>
               </article>
             ))}
@@ -269,6 +395,246 @@ export function AdminPage() {
 
       <section className="surface">
         <div className="table-header">
+<<<<<<< HEAD
+          <p>Tenant quotas</p>
+          <span>Hard limits enforced by the API before a VM request is accepted.</span>
+        </div>
+        <div className="list-rows">
+          {tenants.map((tenant) => {
+            const form = quotaForms[tenant.id] ?? tenantToQuotaForm(tenant);
+            return (
+              <form
+                className="detail-row quota-row"
+                key={tenant.id}
+                onSubmit={(event) => void handleTenantQuotaUpdate(event, tenant.id)}
+              >
+                <div>
+                  <strong>{tenant.name}</strong>
+                  <span>{tenant.slug}</span>
+                </div>
+                <label>
+                  VMs
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.maxVms}
+                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxVms", event.target.value))}
+                  />
+                </label>
+                <label>
+                  CPU
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.maxCpuCores}
+                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxCpuCores", event.target.value))}
+                  />
+                </label>
+                <label>
+                  RAM MB
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.maxMemoryMb}
+                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxMemoryMb", event.target.value))}
+                  />
+                </label>
+                <label>
+                  Disk GB
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.maxDiskGb}
+                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxDiskGb", event.target.value))}
+                  />
+                </label>
+                <button className="secondary-button" type="submit">
+                  Save limits
+                </button>
+              </form>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="surface">
+        <div className="table-header">
+          <p>VM packages</p>
+          <span>Plans users can select during VM creation. Inactive packages stay hidden from users.</span>
+        </div>
+        <form className="grid-form package-create-form" onSubmit={handlePackageCreate}>
+          <label>
+            Package ID
+            <input
+              value={packageForm.id}
+              onChange={(event) => setPackageForm({ ...packageForm, id: event.target.value })}
+              placeholder="cloud-dev"
+            />
+          </label>
+          <label>
+            Name
+            <input
+              value={packageForm.name}
+              onChange={(event) => setPackageForm({ ...packageForm, name: event.target.value })}
+              placeholder="Cloud Dev"
+            />
+          </label>
+          <label>
+            Badge
+            <input
+              value={packageForm.badge}
+              onChange={(event) => setPackageForm({ ...packageForm, badge: event.target.value })}
+              placeholder="Starter"
+            />
+          </label>
+          <label>
+            Sort
+            <input
+              type="number"
+              value={packageForm.sortOrder}
+              onChange={(event) => setPackageForm({ ...packageForm, sortOrder: event.target.value })}
+            />
+          </label>
+          <label>
+            CPU
+            <input
+              type="number"
+              min="1"
+              value={packageForm.cpuCores}
+              onChange={(event) => setPackageForm({ ...packageForm, cpuCores: event.target.value })}
+            />
+          </label>
+          <label>
+            RAM MB
+            <input
+              type="number"
+              min="256"
+              value={packageForm.memoryMb}
+              onChange={(event) => setPackageForm({ ...packageForm, memoryMb: event.target.value })}
+            />
+          </label>
+          <label>
+            Disk GB
+            <input
+              type="number"
+              min="1"
+              value={packageForm.diskGb}
+              onChange={(event) => setPackageForm({ ...packageForm, diskGb: event.target.value })}
+            />
+          </label>
+          <label>
+            Description
+            <input
+              value={packageForm.description}
+              onChange={(event) => setPackageForm({ ...packageForm, description: event.target.value })}
+              placeholder="Short user-facing plan description"
+            />
+          </label>
+          <label className="toggle-field">
+            <input
+              type="checkbox"
+              checked={packageForm.isActive}
+              onChange={(event) => setPackageForm({ ...packageForm, isActive: event.target.checked })}
+            />
+            Active for users
+          </label>
+          <button className="primary-button" type="submit">
+            Create package
+          </button>
+        </form>
+
+        <div className="list-rows package-list">
+          {packages.map((vmPackage) => {
+            const form = packageForms[vmPackage.id] ?? packageToForm(vmPackage);
+            return (
+              <form
+                className="detail-row package-row"
+                key={vmPackage.id}
+                onSubmit={(event) => void handlePackageUpdate(event, vmPackage.id)}
+              >
+                <div>
+                  <strong>{vmPackage.name}</strong>
+                  <span>
+                    {vmPackage.id} · {vmPackage.isActive ? "active" : "inactive"}
+                  </span>
+                </div>
+                <label>
+                  Name
+                  <input
+                    value={form.name}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "name", event.target.value))}
+                  />
+                </label>
+                <label>
+                  CPU
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.cpuCores}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "cpuCores", event.target.value))}
+                  />
+                </label>
+                <label>
+                  RAM MB
+                  <input
+                    type="number"
+                    min="256"
+                    value={form.memoryMb}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "memoryMb", event.target.value))}
+                  />
+                </label>
+                <label>
+                  Disk GB
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.diskGb}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "diskGb", event.target.value))}
+                  />
+                </label>
+                <label>
+                  Badge
+                  <input
+                    value={form.badge}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "badge", event.target.value))}
+                  />
+                </label>
+                <label>
+                  Sort
+                  <input
+                    type="number"
+                    value={form.sortOrder}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "sortOrder", event.target.value))}
+                  />
+                </label>
+                <label className="toggle-field package-toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "isActive", event.target.checked))}
+                  />
+                  Active
+                </label>
+                <label className="package-description-field">
+                  Description
+                  <input
+                    value={form.description}
+                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "description", event.target.value))}
+                  />
+                </label>
+                <button className="secondary-button" type="submit">
+                  Save package
+                </button>
+              </form>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="surface">
+        <div className="table-header">
+=======
+>>>>>>> origin/main
           <p>Provisioning failures</p>
           <span>Failed jobs can be requeued after config or provider issues are fixed.</span>
         </div>
@@ -354,3 +720,114 @@ function extractFirewallGuardrail(payload: string): { group?: string; enabled?: 
     return null;
   }
 }
+<<<<<<< HEAD
+
+type TenantQuotaForm = {
+  maxVms: string;
+  maxCpuCores: string;
+  maxMemoryMb: string;
+  maxDiskGb: string;
+};
+
+function tenantToQuotaForm(tenant: Tenant): TenantQuotaForm {
+  return {
+    maxVms: String(tenant.maxVms),
+    maxCpuCores: String(tenant.maxCpuCores),
+    maxMemoryMb: String(tenant.maxMemoryMb),
+    maxDiskGb: String(tenant.maxDiskGb),
+  };
+}
+
+function updateQuotaForm(
+  forms: Record<number, TenantQuotaForm>,
+  tenantId: number,
+  key: keyof TenantQuotaForm,
+  value: string,
+): Record<number, TenantQuotaForm> {
+  const current = forms[tenantId] ?? { maxVms: "0", maxCpuCores: "0", maxMemoryMb: "0", maxDiskGb: "0" };
+  return {
+    ...forms,
+    [tenantId]: {
+      ...current,
+      [key]: value,
+    },
+  };
+}
+
+type PackageForm = {
+  id: string;
+  name: string;
+  description: string;
+  cpuCores: string;
+  memoryMb: string;
+  diskGb: string;
+  badge: string;
+  sortOrder: string;
+  isActive: boolean;
+};
+
+function defaultPackageForm(): PackageForm {
+  return {
+    id: "",
+    name: "",
+    description: "",
+    cpuCores: "2",
+    memoryMb: "2048",
+    diskGb: "50",
+    badge: "",
+    sortOrder: "100",
+    isActive: true,
+  };
+}
+
+function packageToForm(vmPackage: VmPackage): PackageForm {
+  return {
+    id: vmPackage.id,
+    name: vmPackage.name,
+    description: vmPackage.description,
+    cpuCores: String(vmPackage.cpuCores),
+    memoryMb: String(vmPackage.memoryMb),
+    diskGb: String(vmPackage.diskGb),
+    badge: vmPackage.badge,
+    sortOrder: String(vmPackage.sortOrder),
+    isActive: vmPackage.isActive,
+  };
+}
+
+function formToPackageInput(form: PackageForm) {
+  return {
+    id: form.id.trim(),
+    ...formToPackageUpdateInput(form),
+  };
+}
+
+function formToPackageUpdateInput(form: PackageForm) {
+  return {
+    name: form.name.trim(),
+    description: form.description.trim(),
+    cpuCores: Number(form.cpuCores),
+    memoryMb: Number(form.memoryMb),
+    diskGb: Number(form.diskGb),
+    badge: form.badge.trim(),
+    sortOrder: Number(form.sortOrder),
+    isActive: form.isActive,
+  };
+}
+
+function updatePackageForm(
+  forms: Record<string, PackageForm>,
+  packageId: string,
+  key: keyof PackageForm,
+  value: string | boolean,
+): Record<string, PackageForm> {
+  const current = forms[packageId] ?? defaultPackageForm();
+  return {
+    ...forms,
+    [packageId]: {
+      ...current,
+      [key]: value,
+    },
+  };
+}
+=======
+>>>>>>> origin/main

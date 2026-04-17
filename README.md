@@ -216,7 +216,11 @@ Schritt 1: Basics
 
 Schritt 2: Package
 
+<<<<<<< HEAD
+Benutzer waehlen ein festes Paket. Freie CPU/RAM/Disk-Werte sind im User-Flow nicht sichtbar und werden auch backendseitig nicht akzeptiert. Die API nutzt `package_id` und setzt CPU/RAM/Disk serverseitig aus der Paketdefinition in PostgreSQL.
+=======
 Benutzer waehlen ein festes Paket. Freie CPU/RAM/Disk-Werte sind im User-Flow nicht sichtbar.
+>>>>>>> origin/main
 
 Aktuelle Pakete:
 
@@ -225,6 +229,24 @@ Aktuelle Pakete:
 - `Cloud L`: 4 vCPU, 4 GB RAM, 80 GB SSD
 - `Cloud XL`: 4 vCPU, 8 GB RAM, 120 GB SSD
 
+<<<<<<< HEAD
+Aktuelle Paket-IDs fuer die API:
+
+- `cloud-s`
+- `cloud-m`
+- `cloud-l`
+- `cloud-xl`
+
+Paketliste per API:
+
+```text
+GET /api/vms/packages
+```
+
+Admins koennen Pakete unter `Admin -> VM packages` verwalten. Inaktive Pakete bleiben fuer Benutzer im Create-Flow unsichtbar, vorhandene VMs behalten aber ihre gespeicherte `package_id`.
+
+=======
+>>>>>>> origin/main
 Schritt 3: Access
 
 Benutzer koennen nur noch Zugriffsdaten setzen:
@@ -290,6 +312,11 @@ Hier sieht man, ob ein Job noch laeuft, erfolgreich abgeschlossen wurde oder feh
 Admin-Funktionen:
 
 - Tenants erstellen
+<<<<<<< HEAD
+- Tenant-Quotas fuer VMs, CPU, RAM und Disk setzen
+- VM-Pakete erstellen, bearbeiten und deaktivieren
+=======
+>>>>>>> origin/main
 - Benutzer erstellen
 - Benutzerliste anzeigen
 - Tenantliste anzeigen
@@ -308,6 +335,10 @@ Grundregeln:
 - Normale Benutzer sehen nur erlaubte VMs.
 - Admins sehen alles.
 - Cross-Tenant-Zugriffe werden serverseitig blockiert.
+<<<<<<< HEAD
+- Tenant-Quotas werden serverseitig vor jeder VM-Erstellung geprueft.
+=======
+>>>>>>> origin/main
 
 Das ist wichtig, weil Benutzer URLs oder IDs manipulieren koennten. Deshalb darf Tenant-Sicherheit nie nur im Frontend passieren.
 
@@ -318,7 +349,11 @@ Eine VM-Erstellung passiert nicht direkt im HTTP-Request.
 Ablauf:
 
 1. Benutzer erstellt im Portal eine VM.
+<<<<<<< HEAD
+2. API validiert Tenant, Paket, Eingaben und Tenant-Quota.
+=======
 2. API validiert Tenant, Paket und Eingaben.
+>>>>>>> origin/main
 3. API legt `VmInstance` und `ProvisioningRequest` in PostgreSQL an.
 4. API schiebt einen Job in Redis.
 5. Worker holt den Job ab.
@@ -650,6 +685,16 @@ README.md
 
 - LDAP/AD ist vorbereitet, aber noch nicht voll aktiv.
 - OPNsense ist als zukuenftiger Network-Provider vorgesehen, aber noch nicht angebunden.
+<<<<<<< HEAD
+- VM-Pakete sind als Datenbank- und Admin-Ressource umgesetzt, aber noch ohne Loesch-/Archivierungsworkflow.
+- Echte Proxmox-Ausfuehrung muss mit realem Cluster und echten Tokens getestet werden.
+- Quotas sind als Tenant-Hard-Limits umgesetzt, aber noch ohne Usage-Dashboard, Reservation-Locking und Billing-Integration.
+- Billing, Snapshots, Backups und Console-Access sind noch nicht umgesetzt.
+
+## Naechste sinnvolle Schritte
+
+- Quota-Usage im Admin-UI sichtbar machen und bei parallelen Create-Requests mit DB-Locks absichern.
+=======
 - Pakete sind aktuell im Frontend definiert; spaeter sollten sie als Admin-Ressource in der Datenbank liegen.
 - Echte Proxmox-Ausfuehrung muss mit realem Cluster und echten Tokens getestet werden.
 - Billing, Quotas, Snapshots, Backups und Console-Access sind noch nicht umgesetzt.
@@ -657,6 +702,7 @@ README.md
 ## Naechste sinnvolle Schritte
 
 - VM-Pakete als Datenbankmodell und Admin-Ressource verwalten.
+>>>>>>> origin/main
 - Proxmox-Templates im Admin-UI pflegbar machen.
 - Network-/Firewall-Profile als Admin-Ressource modellieren.
 - OPNsense-Provider fuer Tenant-Netze vorbereiten.

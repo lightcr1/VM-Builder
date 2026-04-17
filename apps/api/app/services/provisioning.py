@@ -2,13 +2,21 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+<<<<<<< HEAD
+from sqlalchemy import func, select
+=======
 from sqlalchemy import select
+>>>>>>> origin/main
 from sqlalchemy.orm import Session
 from rq import Retry
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+<<<<<<< HEAD
+from app.models.domain import Membership, ProvisioningRequest, RequestStatus, Role, Tenant, User, VmInstance, VmStatus, VmTemplate
+=======
 from app.models.domain import Membership, ProvisioningRequest, RequestStatus, Role, User, VmInstance, VmStatus, VmTemplate
+>>>>>>> origin/main
 from app.providers.compute.base import ComputeVmRequest
 from app.providers.compute.factory import get_compute_provider
 from app.services.audit import write_audit_event
@@ -23,6 +31,10 @@ def create_vm_request(
     description: str,
     template: VmTemplate,
     tenant_id: int,
+<<<<<<< HEAD
+    package_id: str = "custom",
+=======
+>>>>>>> origin/main
     cpu_cores: int | None = None,
     memory_mb: int | None = None,
     disk_gb: int | None = None,
@@ -42,6 +54,16 @@ def create_vm_request(
     requested_cpu_cores = cpu_cores or template.cpu_cores
     requested_memory_mb = memory_mb or template.memory_mb
     requested_disk_gb = disk_gb or template.disk_gb
+<<<<<<< HEAD
+    _ensure_tenant_quota(
+        db,
+        tenant_id=tenant_id,
+        requested_cpu_cores=requested_cpu_cores,
+        requested_memory_mb=requested_memory_mb,
+        requested_disk_gb=requested_disk_gb,
+    )
+=======
+>>>>>>> origin/main
 
     vm = VmInstance(
         name=name,
@@ -49,6 +71,13 @@ def create_vm_request(
         owner_user_id=actor.id,
         tenant_id=tenant_id,
         template_id=template.id,
+<<<<<<< HEAD
+        package_id=package_id,
+        cpu_cores=requested_cpu_cores,
+        memory_mb=requested_memory_mb,
+        disk_gb=requested_disk_gb,
+=======
+>>>>>>> origin/main
         status=VmStatus.REQUESTED,
         provider_name="proxmox" if _is_proxmox_enabled() else "mock-proxmox",
     )
@@ -257,6 +286,52 @@ def _is_proxmox_enabled() -> bool:
     return settings.proxmox_enabled
 
 
+<<<<<<< HEAD
+def _ensure_tenant_quota(
+    db: Session,
+    *,
+    tenant_id: int,
+    requested_cpu_cores: int,
+    requested_memory_mb: int,
+    requested_disk_gb: int,
+) -> None:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    usage = db.execute(
+        select(
+            func.count(VmInstance.id),
+            func.coalesce(func.sum(VmInstance.cpu_cores), 0),
+            func.coalesce(func.sum(VmInstance.memory_mb), 0),
+            func.coalesce(func.sum(VmInstance.disk_gb), 0),
+        )
+        .where(VmInstance.tenant_id == tenant_id)
+        .where(VmInstance.status != VmStatus.ERROR)
+    ).one()
+
+    next_usage = {
+        "vms": int(usage[0]) + 1,
+        "cpu_cores": int(usage[1]) + requested_cpu_cores,
+        "memory_mb": int(usage[2]) + requested_memory_mb,
+        "disk_gb": int(usage[3]) + requested_disk_gb,
+    }
+    limits = {
+        "vms": tenant.max_vms,
+        "cpu_cores": tenant.max_cpu_cores,
+        "memory_mb": tenant.max_memory_mb,
+        "disk_gb": tenant.max_disk_gb,
+    }
+    exceeded = {key: {"requested": next_usage[key], "limit": limits[key]} for key in limits if next_usage[key] > limits[key]}
+    if exceeded:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "Tenant quota exceeded", "exceeded": exceeded},
+        )
+
+
+=======
+>>>>>>> origin/main
 def _dispatch_provisioning_job(request_id: int) -> None:
     if settings.provisioning_mode == "inline":
         process_provisioning_request(request_id)
