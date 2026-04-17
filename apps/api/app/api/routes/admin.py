@@ -6,13 +6,21 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.domain import Membership, Tenant, User
 from app.schemas.common import AuditEventRead
+<<<<<<< HEAD
 from app.schemas.vms import ProvisioningRequestRead, VmPackageCreate, VmPackageRead, VmPackageUpdate
 from app.schemas.users import TenantCreate, TenantQuotaUpdate, TenantRead, UserCreate, UserRead
+=======
+from app.schemas.vms import ProvisioningRequestRead
+from app.schemas.users import TenantCreate, TenantRead, UserCreate, UserRead
+>>>>>>> origin/main
 from app.services.audit import write_audit_event
 from app.services.auth import require_admin
 from app.services.bootstrap import ensure_vm_templates
 from app.services.provisioning import requeue_failed_request
+<<<<<<< HEAD
 from app.services.vm_packages import create_vm_package, list_vm_packages, package_to_read, update_vm_package
+=======
+>>>>>>> origin/main
 
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -76,6 +84,7 @@ def list_tenants(db: Session = Depends(get_db)) -> list[Tenant]:
 def create_tenant(payload: TenantCreate, db: Session = Depends(get_db), admin=Depends(require_admin)) -> Tenant:
     if db.scalar(select(Tenant).where(Tenant.slug == payload.slug)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tenant slug already exists")
+<<<<<<< HEAD
     tenant = Tenant(
         name=payload.name,
         slug=payload.slug,
@@ -84,6 +93,9 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db), admin=De
         max_memory_mb=payload.max_memory_mb,
         max_disk_gb=payload.max_disk_gb,
     )
+=======
+    tenant = Tenant(name=payload.name, slug=payload.slug)
+>>>>>>> origin/main
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
@@ -98,6 +110,7 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db), admin=De
     return tenant
 
 
+<<<<<<< HEAD
 @router.patch("/tenants/{tenant_id}/quotas", response_model=TenantRead)
 def update_tenant_quotas(
     tenant_id: int,
@@ -179,6 +192,8 @@ def update_admin_vm_package(
     return package_to_read(vm_package)
 
 
+=======
+>>>>>>> origin/main
 @router.get("/audit-events", response_model=list[AuditEventRead])
 def list_audit_events(db: Session = Depends(get_db)) -> list:
     from app.models.domain import AuditEvent
