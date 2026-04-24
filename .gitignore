@@ -6,7 +6,14 @@ node_modules/
 dist/
 .env
 *.pyc
+*.db
 *.tsbuildinfo
+*.egg-info/
+vite.config.js
+vite.config.d.ts
 infra/proxy/data/
 infra/proxy/config/
 infra/proxy/certs/
+VM-Builder.html
+components/
+pages/

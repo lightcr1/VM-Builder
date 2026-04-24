@@ -1,319 +1,231 @@
-import { FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type VmInput } from "@/lib/api";
 import type { Tenant, VmPackage, VmTemplate } from "@/types";
-import { SectionHeader } from "@/components/SectionHeader";
+
+const badgeColors: Record<string, { bg: string; color: string }> = {
+  Starter:     { bg: "#EFF6FF", color: "#3B82F6" },
+  Popular:     { bg: "#ECFDF5", color: "#10B981" },
+  Growth:      { bg: "#FFFBEB", color: "#F59E0B" },
+  Performance: { bg: "#F5F3FF", color: "#8B5CF6" },
+};
+
+const steps = ["Basics", "Package", "Access", "Review"];
+
+const inp = { width: "100%", padding: "9px 12px", border: "1px solid #E2E8F0", borderRadius: "8px", fontSize: "13px", outline: "none", boxSizing: "border-box" } as React.CSSProperties;
+const card = { background: "#fff", borderRadius: "14px", border: "1px solid #E2E8F0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", overflow: "hidden" };
 
 export function VmCreatePage() {
+  const navigate = useNavigate();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [templates, setTemplates] = useState<VmTemplate[]>([]);
   const [packages, setPackages] = useState<VmPackage[]>([]);
-  const [created, setCreated] = useState<string | null>(null);
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [selectedPackageId, setSelectedPackageId] = useState("cloud-m");
-  const selectedPackage = packages.find((plan) => plan.id === selectedPackageId) ?? packages[0];
+  const [step, setStep] = useState(0);
+  const [submitted, setSubmitted] = useState<string | null>(null);
   const [form, setForm] = useState<VmInput>({
-    name: "",
-    description: "",
-    templateId: 0,
-    tenantId: 0,
-    packageId: "cloud-m",
-    startOnCreate: true,
-    ipConfigMode: "dhcp",
+    name: "", description: "", templateId: 0, tenantId: 0, packageId: "cloud-m", startOnCreate: true, ipConfigMode: "dhcp",
   });
 
   useEffect(() => {
-    void Promise.all([api.tenants.list(), api.vms.templates(), api.vms.packages()]).then(([tenantItems, templateItems, packageItems]) => {
-      setTenants(tenantItems);
-      setTemplates(templateItems);
-      setPackages(packageItems);
-      const defaultPackage = packageItems.find((plan) => plan.id === "cloud-m") ?? packageItems[0];
-      setForm((current) => ({
-        ...current,
-        tenantId: current.tenantId || tenantItems[0]?.id || 0,
-        templateId: current.templateId || templateItems[0]?.id || 0,
-        packageId: current.packageId || defaultPackage?.id || "cloud-m",
+    void Promise.all([api.tenants.list(), api.vms.templates(), api.vms.packages()]).then(([ts, tmps, pkgs]) => {
+      setTenants(ts);
+      setTemplates(tmps);
+      setPackages(pkgs);
+      setForm((f) => ({
+        ...f,
+        tenantId: f.tenantId || ts[0]?.id || 0,
+        templateId: f.templateId || tmps[0]?.id || 0,
+        packageId: f.packageId || pkgs.find((p) => p.id === "cloud-m")?.id || pkgs[0]?.id || "cloud-m",
       }));
-      if (defaultPackage) {
-        setSelectedPackageId(defaultPackage.id);
-      }
     });
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const vm = await api.vms.create({
-      ...form,
-      packageId: selectedPackage?.id ?? form.packageId,
-      ipConfigMode: "dhcp",
-      networkBridge: undefined,
-      vlanTag: undefined,
-      ipv4Address: undefined,
-      ipv4Gateway: undefined,
-    });
-    setCreated(`VM ${vm.name} was requested. Provisioning continues in the background.`);
-    setForm((current) => ({ ...current, name: "", description: "" }));
-    setStep(1);
+  const selPkg = packages.find((p) => p.id === form.packageId);
+  const set = (k: keyof VmInput, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const canNext = step === 0 ? form.name.trim().length >= 2 : true;
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const vm = await api.vms.create({ ...form, ipConfigMode: "dhcp", networkBridge: undefined, vlanTag: undefined, ipv4Address: undefined, ipv4Gateway: undefined });
+    setSubmitted(vm.name);
   }
 
-  function selectPackage(packageId: string) {
-    const nextPackage = packages.find((plan) => plan.id === packageId) ?? packages[0];
-    if (!nextPackage) return;
-    setSelectedPackageId(nextPackage.id);
-    setForm((current) => ({
-      ...current,
-      packageId: nextPackage.id,
-    }));
+  if (submitted) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", gap: "16px", textAlign: "center" }}>
+        <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "28px" }}>✓</div>
+        <div style={{ fontSize: "22px", fontWeight: 700, color: "#0F172A" }}>VM Request Submitted</div>
+        <div style={{ fontSize: "13px", color: "#64748B", maxWidth: "320px" }}>
+          <strong style={{ fontFamily: "monospace" }}>{submitted}</strong> has been queued for provisioning. Check the Requests page for live status.
+        </div>
+        <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+          <button onClick={() => navigate("/requests")} style={{ padding: "10px 20px", borderRadius: "8px", border: "1px solid #E2E8F0", background: "#fff", color: "#334155", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>View Requests</button>
+          <button onClick={() => { setSubmitted(null); setStep(0); setForm((f) => ({ ...f, name: "", description: "" })); }}
+            style={{ padding: "10px 20px", borderRadius: "8px", border: "none", background: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Create Another</button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="page-stack">
-      <SectionHeader
-        title="Create VM"
-        description="Create a tenant VM with a predefined package, managed network defaults and optional SSH access."
-      />
+    <div>
+      <div style={{ marginBottom: "24px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Workspace</div>
+        <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#0F172A", margin: 0 }}>Create VM</h1>
+        <p style={{ fontSize: "13px", color: "#64748B", marginTop: "4px" }}>Configure a new virtual machine with a predefined package and managed network.</p>
+      </div>
 
-      <div className="create-layout">
-        <section className="surface form-surface">
-          <div className="table-header">
-            <p>New virtual machine</p>
-            <span>Choose the basic details, a package and how you want to access the VM.</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "20px", alignItems: "start" }}>
+        <div style={card}>
+          <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ fontSize: "12px", color: "#94A3B8", marginBottom: "12px" }}>New virtual machine</div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {steps.map((s, i) => (
+                <div key={s} onClick={() => i < step && setStep(i)}
+                  style={{ flex: 1, padding: "10px 16px", borderRadius: "8px", cursor: i < step ? "pointer" : "default", background: i === step ? "#EFF6FF" : "#F8FAFC", border: `1px solid ${i === step ? "#BFDBFE" : "#E2E8F0"}`, color: i === step ? "#2563EB" : i < step ? "#64748B" : "#94A3B8", fontSize: "13px", fontWeight: i === step ? 700 : 500 }}>
+                  {i + 1}. {s}
+                  {i < step && <span style={{ marginLeft: "4px", color: "#10B981" }}>✓</span>}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="wizard-steps">
-            <button type="button" className={`wizard-step ${step === 1 ? "active" : ""}`} onClick={() => setStep(1)}>
-              1. Basics
-            </button>
-            <button type="button" className={`wizard-step ${step === 2 ? "active" : ""}`} onClick={() => setStep(2)}>
-              2. Package
-            </button>
-            <button type="button" className={`wizard-step ${step === 3 ? "active" : ""}`} onClick={() => setStep(3)}>
-              3. Access
-            </button>
-            <button type="button" className={`wizard-step ${step === 4 ? "active" : ""}`} onClick={() => setStep(4)}>
-              4. Review
-            </button>
-          </div>
-          <form className="grid-form" onSubmit={handleSubmit}>
-            {step === 1 ? (
-              <>
-                <label>
-                  Name
-                  <input
-                    value={form.name}
-                    onChange={(event) => setForm({ ...form, name: event.target.value })}
-                    placeholder="web-01"
-                  />
-                </label>
-                <label>
-                  Description optional
-                  <input
-                    value={form.description}
-                    onChange={(event) => setForm({ ...form, description: event.target.value })}
-                    placeholder="Web server for the customer portal"
-                  />
-                </label>
-                <label>
-                  Tenant
-                  <select
-                    value={form.tenantId}
-                    onChange={(event) => setForm({ ...form, tenantId: Number(event.target.value) })}
-                  >
-                    {tenants.map((tenant) => (
-                      <option key={tenant.id} value={tenant.id}>
-                        {tenant.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Template
-                  <select
-                    value={form.templateId}
-                    onChange={(event) => setForm({ ...form, templateId: Number(event.target.value) })}
-                  >
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="wizard-actions form-span-2">
-                  <button type="button" className="ghost-button" onClick={() => setStep(2)}>
-                    Continue
-                  </button>
-                </div>
-              </>
-            ) : null}
 
-            {step === 2 ? (
-              <>
-                <div className="package-grid form-span-2">
-                  {packages.length === 0 ? <p className="empty-state">Packages are loading.</p> : null}
-                  {packages.map((plan) => (
-                    <button
-                      type="button"
-                      key={plan.id}
-                      className={`package-option ${selectedPackageId === plan.id ? "active" : ""}`}
-                      onClick={() => selectPackage(plan.id)}
-                    >
-                      <span className="package-badge">{plan.badge}</span>
-                      <strong>{plan.name}</strong>
-                      <span>{plan.description}</span>
-                      <div className="package-specs">
-                        <span>{plan.cpuCores} vCPU</span>
-                        <span>{plan.memoryMb / 1024} GB RAM</span>
-                        <span>{plan.diskGb} GB SSD</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="wizard-actions form-span-2">
-                  <button type="button" className="ghost-button" onClick={() => setStep(1)}>
-                    Back
-                  </button>
-                  <button type="button" className="ghost-button" onClick={() => setStep(3)}>
-                    Continue
-                  </button>
-                </div>
-              </>
-            ) : null}
-
-            {step === 3 ? (
-              <>
-                <div className="managed-network-note form-span-2">
-                  <strong>Network is managed automatically</strong>
-                  <span>
-                    VM Builder assigns the correct tenant network and firewall policy automatically. You only choose how
-                    you want to log in after the VM is ready.
-                  </span>
-                </div>
-                <label>
-                  Default user
-                  <input
-                    value={form.cloudInitUser ?? ""}
-                    onChange={(event) => setForm({ ...form, cloudInitUser: event.target.value })}
-                    placeholder="ubuntu"
-                  />
-                </label>
-                <label className="toggle-field">
-                  Start after create
-                  <input
-                    type="checkbox"
-                    checked={Boolean(form.startOnCreate)}
-                    onChange={(event) => setForm({ ...form, startOnCreate: event.target.checked })}
-                  />
-                </label>
-                <label className="form-span-2">
-                  SSH Public Key
-                  <textarea
-                    rows={4}
-                    value={form.sshPublicKey ?? ""}
-                    onChange={(event) => setForm({ ...form, sshPublicKey: event.target.value })}
-                    placeholder="Paste your public SSH key, for example ssh-ed25519 AAAA..."
-                  />
-                </label>
-                <div className="wizard-actions form-span-2">
-                  <button type="button" className="ghost-button" onClick={() => setStep(2)}>
-                    Back
-                  </button>
-                  <button type="button" className="ghost-button" onClick={() => setStep(4)}>
-                    Review
-                  </button>
-                </div>
-              </>
-            ) : null}
-
-            {step === 4 ? (
-              <>
-                <div className="review-panel form-span-2">
-                  <div className="summary-stack">
-                    <div className="summary-item">
-                      <span>Name</span>
-                      <strong>{form.name || "Unnamed request"}</strong>
-                    </div>
-                    <div className="summary-item">
-                      <span>Tenant / Template</span>
-                      <strong>
-                        {tenants.find((tenant) => tenant.id === form.tenantId)?.name ?? "Not selected"} ·{" "}
-                        {templates.find((template) => template.id === form.templateId)?.name ?? "Not selected"}
-                      </strong>
-                    </div>
-                    <div className="summary-item">
-                      <span>Package</span>
-                      <strong>
-                        {selectedPackage
-                          ? `${selectedPackage.name} · ${selectedPackage.cpuCores} vCPU · ${selectedPackage.memoryMb / 1024} GB RAM · ${selectedPackage.diskGb} GB SSD`
-                          : "No package selected"}
-                      </strong>
-                    </div>
-                    <div className="summary-item">
-                      <span>Network</span>
-                      <strong>Managed tenant network · DHCP · standard firewall policy</strong>
-                    </div>
-                    <div className="summary-item">
-                      <span>Access</span>
-                      <strong>
-                        {form.cloudInitUser || "ubuntu"} user · {form.sshPublicKey ? "SSH key provided" : "No SSH key"} ·{" "}
-                        {form.startOnCreate ? "starts after create" : "stays stopped"}
-                      </strong>
-                    </div>
+          <div style={{ padding: "28px 24px" }}>
+            {step === 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Name <span style={{ color: "#EF4444" }}>*</span></label>
+                    <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. web-01" style={{ ...inp, fontFamily: "monospace" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Description <span style={{ color: "#94A3B8", fontWeight: 400 }}>optional</span></label>
+                    <input value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Short description" style={inp} />
                   </div>
                 </div>
-                <div className="wizard-actions form-span-2">
-                  <button type="button" className="ghost-button" onClick={() => setStep(3)}>
-                    Back
-                  </button>
-                  <button className="primary-button" type="submit">
-                    Request VM
-                  </button>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Tenant</label>
+                    <select value={form.tenantId} onChange={(e) => set("tenantId", Number(e.target.value))} style={{ ...inp, background: "#fff" }}>
+                      {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Template</label>
+                    <select value={form.templateId} onChange={(e) => set("templateId", Number(e.target.value))} style={{ ...inp, background: "#fff" }}>
+                      {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
                 </div>
-              </>
-            ) : null}
-          </form>
-          {created ? <p className="success-banner">{created}</p> : null}
-        </section>
+              </div>
+            )}
 
-        <aside className="surface order-summary">
-          <div className="table-header">
-            <p>Request summary</p>
-            <span>The request will be queued and provisioned by the platform.</span>
+            {step === 1 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                {packages.map((pkg) => {
+                  const bc = badgeColors[pkg.badge] ?? { bg: "#F1F5F9", color: "#64748B" };
+                  const sel = form.packageId === pkg.id;
+                  return (
+                    <div key={pkg.id} onClick={() => set("packageId", pkg.id)}
+                      style={{ padding: "20px", borderRadius: "10px", border: `2px solid ${sel ? "#2563EB" : "#E2E8F0"}`, cursor: "pointer", background: sel ? "#EFF6FF" : "#fff" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0F172A" }}>{pkg.name}</div>
+                        <span style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: bc.bg, color: bc.color, letterSpacing: "0.06em" }}>{pkg.badge.toUpperCase()}</span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#64748B", marginBottom: "12px", lineHeight: "1.4" }}>{pkg.description}</div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        {[`${pkg.cpuCores} vCPU`, `${pkg.memoryMb / 1024} GB RAM`, `${pkg.diskGb} GB SSD`].map((spec) => (
+                          <span key={spec} style={{ fontSize: "11px", fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "3px 7px", borderRadius: "4px" }}>{spec}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {step === 2 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: "10px", padding: "14px 16px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#0369A1", marginBottom: "4px" }}>Network is managed automatically</div>
+                  <div style={{ fontSize: "12px", color: "#0284C7", lineHeight: "1.5" }}>ARCS-Cloud assigns the correct tenant network and firewall policy automatically.</div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "end" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Default user</label>
+                    <input value={form.cloudInitUser ?? ""} onChange={(e) => set("cloudInitUser", e.target.value)} placeholder="ubuntu" style={{ ...inp, fontFamily: "monospace" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600, color: "#374151", cursor: "pointer" }}>
+                      <input type="checkbox" checked={Boolean(form.startOnCreate)} onChange={(e) => set("startOnCreate", e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#2563EB" }} />
+                      Start after create
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>SSH Public Key <span style={{ color: "#94A3B8", fontWeight: 400 }}>optional</span></label>
+                  <textarea value={form.sshPublicKey ?? ""} onChange={(e) => set("sshPublicKey", e.target.value)}
+                    placeholder="Paste your public SSH key, e.g. ssh-ed25519 AAAA…"
+                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #E2E8F0", borderRadius: "8px", fontSize: "12px", outline: "none", resize: "vertical", minHeight: "90px", boxSizing: "border-box", fontFamily: "monospace", lineHeight: "1.5" }} />
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ fontSize: "13px", color: "#64748B", marginBottom: "8px" }}>Review your configuration before submitting.</div>
+                {[
+                  ["Name", form.name || "(unnamed)", true],
+                  ["Tenant / Template", `${tenants.find((t) => t.id === form.tenantId)?.name ?? "—"} · ${templates.find((t) => t.id === form.templateId)?.name ?? "—"}`],
+                  ["Package", selPkg ? `${selPkg.name} · ${selPkg.cpuCores} vCPU · ${selPkg.memoryMb / 1024} GB RAM · ${selPkg.diskGb} GB SSD` : "—"],
+                  ["Network", "Managed tenant network · DHCP · standard firewall policy"],
+                  ["Access", `${form.cloudInitUser || "ubuntu"} user · ${form.sshPublicKey ? "SSH key set" : "No SSH key"} · ${form.startOnCreate ? "starts after create" : "manual start"}`],
+                ].map(([k, v, mono]) => (
+                  <div key={String(k)} style={{ background: "#F8FAFC", borderRadius: "8px", padding: "14px 16px", border: "1px solid #E2E8F0" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>{k}</div>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", fontFamily: mono ? "monospace" : "inherit" }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="summary-stack">
-            <div className="summary-item">
-              <span>Tenant</span>
-              <strong>{tenants.find((tenant) => tenant.id === form.tenantId)?.name ?? "Not selected"}</strong>
-            </div>
-            <div className="summary-item">
-              <span>Template</span>
-              <strong>{templates.find((template) => template.id === form.templateId)?.name ?? "Not selected"}</strong>
-            </div>
-            <div className="summary-item">
-              <span>Package</span>
-              <strong>
-                {selectedPackage
-                  ? `${selectedPackage.name} · ${selectedPackage.cpuCores} vCPU · ${selectedPackage.memoryMb / 1024} GB RAM · ${selectedPackage.diskGb} GB SSD`
-                  : "No package selected"}
-              </strong>
-            </div>
-            <div className="summary-item">
-              <span>Network</span>
-              <strong>Managed tenant network · standard firewall policy</strong>
-            </div>
-            <div className="summary-item">
-              <span>Access</span>
-              <strong>
-                {form.cloudInitUser || "ubuntu"} user · {form.startOnCreate ? "auto-start enabled" : "manual start"}
-              </strong>
-            </div>
+
+          <div style={{ padding: "16px 24px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between" }}>
+            {step > 0
+              ? <button onClick={() => setStep((s) => s - 1)} style={{ padding: "9px 20px", borderRadius: "8px", border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>← Back</button>
+              : <button onClick={() => navigate("/instances")} style={{ padding: "9px 20px", borderRadius: "8px", border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+            }
+            {step < 3
+              ? <button onClick={() => setStep((s) => s + 1)} disabled={!canNext} style={{ padding: "9px 20px", borderRadius: "8px", border: "none", background: canNext ? "#2563EB" : "#CBD5E1", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: canNext ? "pointer" : "not-allowed" }}>Continue →</button>
+              : <button onClick={(e) => void handleSubmit(e)} style={{ padding: "9px 20px", borderRadius: "8px", border: "none", background: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Request VM →</button>
+            }
           </div>
-          <div className="summary-note">
-            <strong>Managed by arcs-cloud</strong>
-            <span>Network placement and firewall rules are applied automatically by the platform.</span>
-            <a href="https://arcs-cloud.ch" target="_blank" rel="noreferrer">
-              Hosted by arcs-cloud
-            </a>
+        </div>
+
+        <div style={{ ...card, position: "sticky", top: "20px" }}>
+          <div style={{ padding: "16px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A" }}>Request summary</div>
+            <span style={{ fontSize: "11px", color: "#94A3B8" }}>Live preview</span>
           </div>
-        </aside>
+          <div style={{ padding: "6px 0" }}>
+            {[
+              ["Tenant", tenants.find((t) => t.id === form.tenantId)?.name ?? "—"],
+              ["Template", templates.find((t) => t.id === form.templateId)?.name ?? "—"],
+              ["Package", selPkg ? `${selPkg.name} · ${selPkg.cpuCores} vCPU · ${selPkg.memoryMb / 1024} GB · ${selPkg.diskGb} GB` : "—"],
+              ["Network", "Managed · standard firewall"],
+              ["Access", `${form.cloudInitUser || "ubuntu"} · ${form.startOnCreate ? "auto-start" : "manual start"}`],
+            ].map(([k, v]) => (
+              <div key={String(k)} style={{ padding: "10px 18px", borderBottom: "1px solid #F8FAFC" }}>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginBottom: "2px" }}>{k}</div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#0F172A" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "14px 18px", background: "#F0F9FF", borderTop: "1px solid #BAE6FD" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#0369A1", marginBottom: "4px" }}>Managed by ARCS-Cloud</div>
+            <div style={{ fontSize: "11px", color: "#0284C7", lineHeight: "1.5" }}>Network placement and firewall rules are applied automatically by the platform.</div>
+          </div>
+        </div>
       </div>
     </div>
   );

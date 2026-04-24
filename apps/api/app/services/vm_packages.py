@@ -1,8 +1,8 @@
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.domain import VmPackage
+from app.models.domain import VmInstance, VmPackage, VmStatus
 from app.schemas.vms import VmPackageCreate, VmPackageRead, VmPackageUpdate
 
 
@@ -103,6 +103,22 @@ def update_vm_package(db: Session, package_id: str, payload: VmPackageUpdate) ->
     db.commit()
     db.refresh(vm_package)
     return vm_package
+
+
+def delete_vm_package(db: Session, package_id: str) -> None:
+    vm_package = get_vm_package(db, package_id, require_active=False)
+    in_use = db.scalar(
+        select(func.count(VmInstance.id))
+        .where(VmInstance.package_id == package_id)
+        .where(VmInstance.status != VmStatus.ERROR)
+    )
+    if in_use:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Package is referenced by {in_use} active VM(s) — deactivate it instead",
+        )
+    db.delete(vm_package)
+    db.commit()
 
 
 def package_to_read(vm_package: VmPackage) -> VmPackageRead:

@@ -1,792 +1,392 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "@/lib/api";
-import { RequestStatusPill } from "@/components/RequestStatusPill";
-import type { AuditEvent, ProvisioningRequest, Tenant, User, VmPackage } from "@/types";
-import { SectionHeader } from "@/components/SectionHeader";
+import type { AuditEvent, ProvisioningRequest, Tenant, TenantUsage, VmPackage } from "@/types";
 
-export function AdminPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-  const [requests, setRequests] = useState<ProvisioningRequest[]>([]);
-  const [packages, setPackages] = useState<VmPackage[]>([]);
-  const [tenantForm, setTenantForm] = useState({
-    name: "",
-    slug: "",
-    maxVms: 10,
-    maxCpuCores: 16,
-    maxMemoryMb: 32768,
-    maxDiskGb: 500,
-  });
-  const [quotaForms, setQuotaForms] = useState<Record<number, TenantQuotaForm>>({});
-  const [packageForm, setPackageForm] = useState<PackageForm>(defaultPackageForm());
-  const [packageForms, setPackageForms] = useState<Record<string, PackageForm>>({});
-  const [userForm, setUserForm] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-    role: "user" as User["role"],
-    tenantId: 0,
-  });
-  const [message, setMessage] = useState<string | null>(null);
-  const [busyRequestId, setBusyRequestId] = useState<number | null>(null);
-  const firewallGuardrails = requests.map((request) => extractFirewallGuardrail(request.providerPayload)).filter(Boolean);
-  const latestFirewallGuardrail = firewallGuardrails[0];
+const card = { background: "#fff", borderRadius: "12px", border: "1px solid #E2E8F0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
+const inp = { width: "100%", padding: "7px 10px", border: "1px solid #E2E8F0", borderRadius: "7px", fontSize: "13px", outline: "none", boxSizing: "border-box" } as React.CSSProperties;
+const numInp = { ...inp, fontFamily: "monospace", textAlign: "right" } as React.CSSProperties;
 
-  async function loadAdminData() {
-    const [userList, tenantList, events, packageList] = await Promise.all([
-      api.users.list(),
-      api.tenants.listAll(),
-      api.audit.list(),
-      api.packages.listAll(),
-    ]);
-    const requestList = await api.vms.requests();
-    setUsers(userList);
-    setTenants(tenantList);
-    setAuditEvents(events);
-    setRequests(requestList);
-    setPackages(packageList);
-    setQuotaForms(Object.fromEntries(tenantList.map((tenant) => [tenant.id, tenantToQuotaForm(tenant)])));
-    setPackageForms(Object.fromEntries(packageList.map((vmPackage) => [vmPackage.id, packageToForm(vmPackage)])));
-    setUserForm((current) => ({
-      ...current,
-      tenantId: current.tenantId || tenantList[0]?.id || 0,
-    }));
-  }
-
-  useEffect(() => {
-    void loadAdminData().then(() => {
-      setMessage(null);
-    }).catch(() => {
-      setMessage("Admin data could not be loaded.");
-    });
-  }, []);
-
-  async function handleTenantCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await api.tenants.create(tenantForm);
-    setTenantForm({ name: "", slug: "", maxVms: 10, maxCpuCores: 16, maxMemoryMb: 32768, maxDiskGb: 500 });
-    setMessage("Tenant created.");
-    await loadAdminData();
-  }
-
-  async function handleTenantQuotaUpdate(event: FormEvent<HTMLFormElement>, tenantId: number) {
-    event.preventDefault();
-    const form = quotaForms[tenantId];
-    if (!form) {
-      return;
-    }
-    await api.tenants.updateQuotas(tenantId, {
-      maxVms: Number(form.maxVms),
-      maxCpuCores: Number(form.maxCpuCores),
-      maxMemoryMb: Number(form.maxMemoryMb),
-      maxDiskGb: Number(form.maxDiskGb),
-    });
-    setMessage("Tenant quotas updated.");
-    await loadAdminData();
-  }
-
-  async function handlePackageCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await api.packages.create(formToPackageInput(packageForm));
-    setPackageForm(defaultPackageForm());
-    setMessage("VM package created.");
-    await loadAdminData();
-  }
-
-  async function handlePackageUpdate(event: FormEvent<HTMLFormElement>, packageId: string) {
-    event.preventDefault();
-    const form = packageForms[packageId];
-    if (!form) {
-      return;
-    }
-    await api.packages.update(packageId, formToPackageUpdateInput(form));
-    setMessage("VM package updated.");
-    await loadAdminData();
-  }
-
-  async function handleUserCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await api.users.create(userForm);
-    setUserForm((current) => ({
-      ...current,
-      fullName: "",
-      email: "",
-      password: "",
-      role: "user",
-    }));
-    setMessage("User created.");
-    await loadAdminData();
-  }
-
-  async function handleRequeue(requestId: number) {
-    setBusyRequestId(requestId);
-    try {
-      await api.vms.requeueRequest(requestId);
-      setMessage(`Provisioning request #${requestId} requeued.`);
-      await loadAdminData();
-    } finally {
-      setBusyRequestId(null);
-    }
-  }
-
-  useEffect(() => {
-    if (!tenantForm.name && !tenantForm.slug) {
-      return;
-    }
-    const nextSlug = tenantForm.name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    setTenantForm((current) => (current.slug === nextSlug ? current : { ...current, slug: nextSlug }));
-  }, [tenantForm.name]);
-
+function QuotaBar({ label, used, max, unit = "" }: { label: string; used: number; max: number; unit?: string }) {
+  const pct = max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0;
+  const color = pct >= 90 ? "#EF4444" : pct >= 70 ? "#F59E0B" : "#3B82F6";
   return (
-    <div className="page-stack">
-      <SectionHeader
-        title="Admin"
-        description="Central tenant, identity and recovery controls for the hosted platform."
-      />
-
-      {message ? <p className="success-banner">{message}</p> : null}
-
-      <div className="metric-strip">
-        <div>
-          <span>Users</span>
-          <strong>{users.length}</strong>
-        </div>
-        <div>
-          <span>Tenants</span>
-          <strong>{tenants.length}</strong>
-        </div>
-        <div>
-          <span>Failed jobs</span>
-          <strong>{requests.filter((request) => request.status === "failed").length}</strong>
-        </div>
-        <div>
-          <span>Packages</span>
-          <strong>{packages.filter((vmPackage) => vmPackage.isActive).length}</strong>
-        </div>
+    <div style={{ flex: 1, minWidth: "60px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+        <span style={{ fontSize: "10px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+        <span style={{ fontSize: "10px", color: "#64748B" }}>{used}{unit ? ` ${unit}` : ""}/{max}{unit ? ` ${unit}` : ""}</span>
       </div>
-
-      <section className="surface">
-        <div className="table-header">
-          <p>Provider guardrails</p>
-          <span>Server-side controls applied by the platform, not selectable by VM users.</span>
-        </div>
-        <div className="summary-stack">
-          <div className="summary-item">
-            <span>Default Proxmox firewall group</span>
-            <strong>{latestFirewallGuardrail?.group ?? "Configured via PROXMOX_DEFAULT_FIREWALL_GROUP"}</strong>
-          </div>
-          <div className="summary-item">
-            <span>VM firewall enforcement</span>
-            <strong>{latestFirewallGuardrail?.enabled ?? "Configured via PROXMOX_ENABLE_VM_FIREWALL"}</strong>
-          </div>
-        </div>
-      </section>
-
-      <div className="split-grid admin-forms">
-        <section className="surface form-surface">
-          <div className="table-header">
-            <p>Create tenant</p>
-            <span>Defines a logical ownership boundary for users and VMs.</span>
-          </div>
-          <form className="grid-form compact-form" onSubmit={handleTenantCreate}>
-            <label>
-              Name
-              <input
-                value={tenantForm.name}
-                onChange={(event) => setTenantForm({ ...tenantForm, name: event.target.value })}
-                placeholder="Edge Lab"
-              />
-            </label>
-            <label>
-              Slug
-              <input
-                value={tenantForm.slug}
-                onChange={(event) => setTenantForm({ ...tenantForm, slug: event.target.value })}
-                placeholder="edge-lab"
-              />
-            </label>
-            <label>
-              VM limit
-              <input
-                type="number"
-                min="0"
-                value={tenantForm.maxVms}
-                onChange={(event) => setTenantForm({ ...tenantForm, maxVms: Number(event.target.value) })}
-              />
-            </label>
-            <label>
-              CPU core limit
-              <input
-                type="number"
-                min="0"
-                value={tenantForm.maxCpuCores}
-                onChange={(event) => setTenantForm({ ...tenantForm, maxCpuCores: Number(event.target.value) })}
-              />
-            </label>
-            <label>
-              RAM limit MB
-              <input
-                type="number"
-                min="0"
-                value={tenantForm.maxMemoryMb}
-                onChange={(event) => setTenantForm({ ...tenantForm, maxMemoryMb: Number(event.target.value) })}
-              />
-            </label>
-            <label>
-              Disk limit GB
-              <input
-                type="number"
-                min="0"
-                value={tenantForm.maxDiskGb}
-                onChange={(event) => setTenantForm({ ...tenantForm, maxDiskGb: Number(event.target.value) })}
-              />
-            </label>
-            <button className="primary-button" type="submit">
-              Create tenant
-            </button>
-          </form>
-        </section>
-
-        <section className="surface form-surface">
-          <div className="table-header">
-            <p>Create user</p>
-            <span>Creates a local account and assigns a default tenant.</span>
-          </div>
-          <form className="grid-form compact-form" onSubmit={handleUserCreate}>
-            <label>
-              Full name
-              <input
-                value={userForm.fullName}
-                onChange={(event) => setUserForm({ ...userForm, fullName: event.target.value })}
-                placeholder="Ava Keller"
-              />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={userForm.email}
-                onChange={(event) => setUserForm({ ...userForm, email: event.target.value })}
-                placeholder="ava@example.com"
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={userForm.password}
-                onChange={(event) => setUserForm({ ...userForm, password: event.target.value })}
-                placeholder="Temporary password"
-              />
-            </label>
-            <label>
-              Role
-              <select
-                value={userForm.role}
-                onChange={(event) => setUserForm({ ...userForm, role: event.target.value as User["role"] })}
-              >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-            <label>
-              Tenant
-              <select
-                value={userForm.tenantId}
-                onChange={(event) => setUserForm({ ...userForm, tenantId: Number(event.target.value) })}
-              >
-                {tenants.map((tenant) => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenant.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="primary-button" type="submit">
-              Create user
-            </button>
-          </form>
-        </section>
+      <div style={{ height: "4px", background: "#F1F5F9", borderRadius: "2px" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: "2px" }} />
       </div>
-
-      <div className="split-grid">
-        <section className="surface">
-          <div className="table-header">
-            <p>Users</p>
-            <span>Roles and tenant memberships.</span>
-          </div>
-          <div className="list-rows">
-            {users.map((user) => (
-              <article className="detail-row" key={user.id}>
-                <div>
-                  <strong>{user.fullName}</strong>
-                  <span>{user.email}</span>
-                </div>
-                <div>
-                  <span>{user.role}</span>
-                  <span>{user.authSource}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="surface">
-          <div className="table-header">
-            <p>Tenants</p>
-            <span>Logical boundaries for VM visibility and, later, network scope.</span>
-          </div>
-          <div className="list-rows">
-            {tenants.map((tenant) => (
-              <article className="detail-row" key={tenant.id}>
-                <div>
-                  <strong>{tenant.name}</strong>
-                  <span>{tenant.slug}</span>
-                </div>
-                <div>
-                  <span>{tenant.maxVms} VMs</span>
-                  <span>{tenant.maxCpuCores} cores · {Math.round(tenant.maxMemoryMb / 1024)} GB RAM · {tenant.maxDiskGb} GB disk</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <section className="surface">
-        <div className="table-header">
-          <p>Tenant quotas</p>
-          <span>Hard limits enforced by the API before a VM request is accepted.</span>
-        </div>
-        <div className="list-rows">
-          {tenants.map((tenant) => {
-            const form = quotaForms[tenant.id] ?? tenantToQuotaForm(tenant);
-            return (
-              <form
-                className="detail-row quota-row"
-                key={tenant.id}
-                onSubmit={(event) => void handleTenantQuotaUpdate(event, tenant.id)}
-              >
-                <div>
-                  <strong>{tenant.name}</strong>
-                  <span>{tenant.slug}</span>
-                </div>
-                <label>
-                  VMs
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.maxVms}
-                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxVms", event.target.value))}
-                  />
-                </label>
-                <label>
-                  CPU
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.maxCpuCores}
-                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxCpuCores", event.target.value))}
-                  />
-                </label>
-                <label>
-                  RAM MB
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.maxMemoryMb}
-                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxMemoryMb", event.target.value))}
-                  />
-                </label>
-                <label>
-                  Disk GB
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.maxDiskGb}
-                    onChange={(event) => setQuotaForms(updateQuotaForm(quotaForms, tenant.id, "maxDiskGb", event.target.value))}
-                  />
-                </label>
-                <button className="secondary-button" type="submit">
-                  Save limits
-                </button>
-              </form>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="surface">
-        <div className="table-header">
-          <p>VM packages</p>
-          <span>Plans users can select during VM creation. Inactive packages stay hidden from users.</span>
-        </div>
-        <form className="grid-form package-create-form" onSubmit={handlePackageCreate}>
-          <label>
-            Package ID
-            <input
-              value={packageForm.id}
-              onChange={(event) => setPackageForm({ ...packageForm, id: event.target.value })}
-              placeholder="cloud-dev"
-            />
-          </label>
-          <label>
-            Name
-            <input
-              value={packageForm.name}
-              onChange={(event) => setPackageForm({ ...packageForm, name: event.target.value })}
-              placeholder="Cloud Dev"
-            />
-          </label>
-          <label>
-            Badge
-            <input
-              value={packageForm.badge}
-              onChange={(event) => setPackageForm({ ...packageForm, badge: event.target.value })}
-              placeholder="Starter"
-            />
-          </label>
-          <label>
-            Sort
-            <input
-              type="number"
-              value={packageForm.sortOrder}
-              onChange={(event) => setPackageForm({ ...packageForm, sortOrder: event.target.value })}
-            />
-          </label>
-          <label>
-            CPU
-            <input
-              type="number"
-              min="1"
-              value={packageForm.cpuCores}
-              onChange={(event) => setPackageForm({ ...packageForm, cpuCores: event.target.value })}
-            />
-          </label>
-          <label>
-            RAM MB
-            <input
-              type="number"
-              min="256"
-              value={packageForm.memoryMb}
-              onChange={(event) => setPackageForm({ ...packageForm, memoryMb: event.target.value })}
-            />
-          </label>
-          <label>
-            Disk GB
-            <input
-              type="number"
-              min="1"
-              value={packageForm.diskGb}
-              onChange={(event) => setPackageForm({ ...packageForm, diskGb: event.target.value })}
-            />
-          </label>
-          <label>
-            Description
-            <input
-              value={packageForm.description}
-              onChange={(event) => setPackageForm({ ...packageForm, description: event.target.value })}
-              placeholder="Short user-facing plan description"
-            />
-          </label>
-          <label className="toggle-field">
-            <input
-              type="checkbox"
-              checked={packageForm.isActive}
-              onChange={(event) => setPackageForm({ ...packageForm, isActive: event.target.checked })}
-            />
-            Active for users
-          </label>
-          <button className="primary-button" type="submit">
-            Create package
-          </button>
-        </form>
-
-        <div className="list-rows package-list">
-          {packages.map((vmPackage) => {
-            const form = packageForms[vmPackage.id] ?? packageToForm(vmPackage);
-            return (
-              <form
-                className="detail-row package-row"
-                key={vmPackage.id}
-                onSubmit={(event) => void handlePackageUpdate(event, vmPackage.id)}
-              >
-                <div>
-                  <strong>{vmPackage.name}</strong>
-                  <span>
-                    {vmPackage.id} · {vmPackage.isActive ? "active" : "inactive"}
-                  </span>
-                </div>
-                <label>
-                  Name
-                  <input
-                    value={form.name}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "name", event.target.value))}
-                  />
-                </label>
-                <label>
-                  CPU
-                  <input
-                    type="number"
-                    min="1"
-                    value={form.cpuCores}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "cpuCores", event.target.value))}
-                  />
-                </label>
-                <label>
-                  RAM MB
-                  <input
-                    type="number"
-                    min="256"
-                    value={form.memoryMb}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "memoryMb", event.target.value))}
-                  />
-                </label>
-                <label>
-                  Disk GB
-                  <input
-                    type="number"
-                    min="1"
-                    value={form.diskGb}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "diskGb", event.target.value))}
-                  />
-                </label>
-                <label>
-                  Badge
-                  <input
-                    value={form.badge}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "badge", event.target.value))}
-                  />
-                </label>
-                <label>
-                  Sort
-                  <input
-                    type="number"
-                    value={form.sortOrder}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "sortOrder", event.target.value))}
-                  />
-                </label>
-                <label className="toggle-field package-toggle">
-                  <input
-                    type="checkbox"
-                    checked={form.isActive}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "isActive", event.target.checked))}
-                  />
-                  Active
-                </label>
-                <label className="package-description-field">
-                  Description
-                  <input
-                    value={form.description}
-                    onChange={(event) => setPackageForms(updatePackageForm(packageForms, vmPackage.id, "description", event.target.value))}
-                  />
-                </label>
-                <button className="secondary-button" type="submit">
-                  Save package
-                </button>
-              </form>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="surface">
-        <div className="table-header">
-          <p>Provisioning failures</p>
-          <span>Failed jobs can be requeued after config or provider issues are fixed.</span>
-        </div>
-        <div className="list-rows">
-          {requests.filter((request) => request.status === "failed").length === 0 ? (
-            <p className="empty-state">No failed provisioning requests at the moment.</p>
-          ) : null}
-          {requests
-            .filter((request) => request.status === "failed")
-            .map((request) => {
-              const error = extractRequestError(request.providerPayload);
-              return (
-                <article className="detail-row request-admin-row" key={request.id}>
-                  <div>
-                    <strong>Request #{request.id}</strong>
-                    <span>
-                      VM #{request.vmInstanceId} {error ? `· ${error}` : ""}
-                    </span>
-                  </div>
-                  <div>
-                    <span>{new Date(request.createdAt).toLocaleString()}</span>
-                    <RequestStatusPill status={request.status} />
-                  </div>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void handleRequeue(request.id)}
-                    disabled={busyRequestId === request.id}
-                  >
-                    {busyRequestId === request.id ? "Requeueing..." : "Requeue"}
-                  </button>
-                </article>
-              );
-            })}
-        </div>
-      </section>
-
-      <section className="surface">
-        <div className="table-header">
-          <p>Recent audit events</p>
-          <span>Operational trace for user, tenant and VM actions.</span>
-        </div>
-        <div className="list-rows">
-          {auditEvents.map((event) => (
-            <article className="detail-row audit-row" key={event.id}>
-              <div>
-                <strong>{event.action}</strong>
-                <span>
-                  {event.entityType} #{event.entityId}
-                </span>
-              </div>
-              <div>
-                <span>{new Date(event.createdAt).toLocaleString()}</span>
-                <span>{event.details}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
 
-function extractRequestError(payload: string): string | null {
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return parsed.error ? String(parsed.error) : null;
-  } catch {
-    return null;
-  }
+type TenantQuotaForm = { maxVms: string; maxCpuCores: string; maxMemoryMb: string; maxDiskGb: string };
+type PackageForm = { id: string; name: string; description: string; cpuCores: string; memoryMb: string; diskGb: string; badge: string; sortOrder: string; isActive: boolean };
+
+function defaultPkgForm(): PackageForm {
+  return { id: "", name: "", description: "", cpuCores: "2", memoryMb: "2048", diskGb: "50", badge: "", sortOrder: "100", isActive: true };
 }
 
-function extractFirewallGuardrail(payload: string): { group?: string; enabled?: string } | null {
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>;
-    const group = parsed.firewall_group ? String(parsed.firewall_group) : undefined;
-    const enabled = parsed.firewall_enabled ? String(parsed.firewall_enabled) : undefined;
-    if (!group && !enabled) {
-      return null;
+function pkgToForm(p: VmPackage): PackageForm {
+  return { id: p.id, name: p.name, description: p.description, cpuCores: String(p.cpuCores), memoryMb: String(p.memoryMb), diskGb: String(p.diskGb), badge: p.badge, sortOrder: String(p.sortOrder), isActive: p.isActive };
+}
+
+function tenantToForm(t: Tenant): TenantQuotaForm {
+  return { maxVms: String(t.maxVms), maxCpuCores: String(t.maxCpuCores), maxMemoryMb: String(t.maxMemoryMb), maxDiskGb: String(t.maxDiskGb) };
+}
+
+export function AdminPage() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantUsage, setTenantUsage] = useState<TenantUsage[]>([]);
+  const [packages, setPackages] = useState<VmPackage[]>([]);
+  const [requests, setRequests] = useState<ProvisioningRequest[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [quotaForms, setQuotaForms] = useState<Record<number, TenantQuotaForm>>({});
+  const [pkgForms, setPkgForms] = useState<Record<string, PackageForm>>({});
+  const [editPkg, setEditPkg] = useState<PackageForm | null>(null);
+  const [tenantForm, setTenantForm] = useState({ name: "", slug: "", maxVms: 10, maxCpuCores: 8, maxMemoryMb: 16384, maxDiskGb: 200 });
+  const [pkgForm, setPkgForm] = useState<PackageForm>(defaultPkgForm());
+  const [message, setMessage] = useState<string | null>(null);
+  const [busyReqId, setBusyReqId] = useState<number | null>(null);
+
+  async function load() {
+    const [ts, usage, pkgs, reqs, events] = await Promise.all([
+      api.tenants.listAll(), api.tenants.getUsage(), api.packages.listAll(), api.vms.requests(), api.audit.list(),
+    ]);
+    setTenants(ts);
+    setTenantUsage(usage);
+    setPackages(pkgs);
+    setRequests(reqs);
+    setAuditEvents(events);
+    setQuotaForms(Object.fromEntries(ts.map((t) => [t.id, tenantToForm(t)])));
+    setPkgForms(Object.fromEntries(pkgs.map((p) => [p.id, pkgToForm(p)])));
+  }
+
+  useEffect(() => { void load().catch(() => setMessage("Failed to load admin data.")); }, []);
+
+  useEffect(() => {
+    if (!tenantForm.name) return;
+    const slug = tenantForm.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    setTenantForm((f) => f.slug === slug ? f : { ...f, slug });
+  }, [tenantForm.name]);
+
+  async function handleCreateTenant(e: FormEvent) {
+    e.preventDefault();
+    await api.tenants.create({ ...tenantForm, maxVms: tenantForm.maxVms, maxCpuCores: tenantForm.maxCpuCores, maxMemoryMb: tenantForm.maxMemoryMb, maxDiskGb: tenantForm.maxDiskGb });
+    setTenantForm({ name: "", slug: "", maxVms: 10, maxCpuCores: 8, maxMemoryMb: 16384, maxDiskGb: 200 });
+    setMessage("Tenant created.");
+    await load();
+  }
+
+  async function handleSaveQuota(e: FormEvent, tenantId: number) {
+    e.preventDefault();
+    const f = quotaForms[tenantId];
+    if (!f) return;
+    await api.tenants.updateQuotas(tenantId, { maxVms: Number(f.maxVms), maxCpuCores: Number(f.maxCpuCores), maxMemoryMb: Number(f.maxMemoryMb), maxDiskGb: Number(f.maxDiskGb) });
+    setMessage("Quotas updated.");
+    await load();
+  }
+
+  async function handleCreatePkg(e: FormEvent) {
+    e.preventDefault();
+    await api.packages.create({ id: pkgForm.id.trim(), name: pkgForm.name.trim(), description: pkgForm.description.trim(), cpuCores: Number(pkgForm.cpuCores), memoryMb: Number(pkgForm.memoryMb), diskGb: Number(pkgForm.diskGb), badge: pkgForm.badge.trim(), sortOrder: Number(pkgForm.sortOrder), isActive: pkgForm.isActive });
+    setPkgForm(defaultPkgForm());
+    setMessage("Package created.");
+    await load();
+  }
+
+  async function handleSavePkg(e: FormEvent) {
+    e.preventDefault();
+    if (!editPkg) return;
+    await api.packages.update(editPkg.id, { name: editPkg.name.trim(), description: editPkg.description.trim(), cpuCores: Number(editPkg.cpuCores), memoryMb: Number(editPkg.memoryMb), diskGb: Number(editPkg.diskGb), badge: editPkg.badge.trim(), sortOrder: Number(editPkg.sortOrder), isActive: editPkg.isActive });
+    setEditPkg(null);
+    setMessage("Package saved.");
+    await load();
+  }
+
+  async function handleDeletePkg(pkgId: string, name: string) {
+    if (!window.confirm(`Delete package "${name}"?`)) return;
+    try {
+      await api.packages.remove(pkgId);
+      setMessage(`Package "${name}" deleted.`);
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to delete package.");
     }
-    return { group, enabled };
-  } catch {
-    return null;
   }
-}
 
-type TenantQuotaForm = {
-  maxVms: string;
-  maxCpuCores: string;
-  maxMemoryMb: string;
-  maxDiskGb: string;
-};
+  async function handleRequeue(reqId: number) {
+    setBusyReqId(reqId);
+    try {
+      await api.vms.requeueRequest(reqId);
+      setMessage(`Request #${reqId} requeued.`);
+      await load();
+    } finally {
+      setBusyReqId(null);
+    }
+  }
 
-function tenantToQuotaForm(tenant: Tenant): TenantQuotaForm {
-  return {
-    maxVms: String(tenant.maxVms),
-    maxCpuCores: String(tenant.maxCpuCores),
-    maxMemoryMb: String(tenant.maxMemoryMb),
-    maxDiskGb: String(tenant.maxDiskGb),
-  };
-}
+  const failedReqs = requests.filter((r) => r.status === "failed");
+  const stats = [
+    { label: "Tenants",      val: tenants.length,                                  color: "#8B5CF6" },
+    { label: "Packages",     val: packages.length,                                 color: "#F59E0B" },
+    { label: "Failed Jobs",  val: failedReqs.length,                               color: "#EF4444" },
+    { label: "Audit Events", val: auditEvents.length,                              color: "#3B82F6" },
+  ];
 
-function updateQuotaForm(
-  forms: Record<number, TenantQuotaForm>,
-  tenantId: number,
-  key: keyof TenantQuotaForm,
-  value: string,
-): Record<number, TenantQuotaForm> {
-  const current = forms[tenantId] ?? { maxVms: "0", maxCpuCores: "0", maxMemoryMb: "0", maxDiskGb: "0" };
-  return {
-    ...forms,
-    [tenantId]: {
-      ...current,
-      [key]: value,
-    },
-  };
-}
+  return (
+    <div>
+      <div style={{ marginBottom: "24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.1em", textTransform: "uppercase" }}>Administration</div>
+          <span style={{ fontSize: "10px", fontWeight: 700, background: "rgba(239,68,68,0.1)", color: "#F87171", padding: "2px 7px", borderRadius: "4px", letterSpacing: "0.05em" }}>ADMIN ONLY</span>
+        </div>
+        <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#0F172A", margin: 0 }}>Admin</h1>
+        <p style={{ fontSize: "13px", color: "#64748B", marginTop: "4px" }}>Tenant, package and provisioning controls for the hosted platform.</p>
+      </div>
 
-type PackageForm = {
-  id: string;
-  name: string;
-  description: string;
-  cpuCores: string;
-  memoryMb: string;
-  diskGb: string;
-  badge: string;
-  sortOrder: string;
-  isActive: boolean;
-};
+      {message && <div style={{ background: "#ECFDF5", border: "1px solid #BBF7D0", borderRadius: "8px", padding: "10px 16px", marginBottom: "20px", fontSize: "13px", color: "#065F46", fontWeight: 600 }}>✓ {message}</div>}
 
-function defaultPackageForm(): PackageForm {
-  return {
-    id: "",
-    name: "",
-    description: "",
-    cpuCores: "2",
-    memoryMb: "2048",
-    diskGb: "50",
-    badge: "",
-    sortOrder: "100",
-    isActive: true,
-  };
-}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "24px" }}>
+        {stats.map((s) => (
+          <div key={s.label} style={{ ...card, padding: "18px 20px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "6px" }}>{s.label}</div>
+            <div style={{ fontSize: "32px", fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
 
-function packageToForm(vmPackage: VmPackage): PackageForm {
-  return {
-    id: vmPackage.id,
-    name: vmPackage.name,
-    description: vmPackage.description,
-    cpuCores: String(vmPackage.cpuCores),
-    memoryMb: String(vmPackage.memoryMb),
-    diskGb: String(vmPackage.diskGb),
-    badge: vmPackage.badge,
-    sortOrder: String(vmPackage.sortOrder),
-    isActive: vmPackage.isActive,
-  };
-}
+      {/* Provider guardrails */}
+      <div style={{ ...card, padding: "20px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>Provider Guardrails</div>
+          <div style={{ fontSize: "11px", color: "#94A3B8" }}>Server-side controls, not selectable by VM users.</div>
+        </div>
+        {[
+          { key: "Default Proxmox firewall group", val: "Configured via PROXMOX_DEFAULT_FIREWALL_GROUP" },
+          { key: "VM firewall enforcement",        val: "Configured via PROXMOX_ENABLE_VM_FIREWALL" },
+        ].map((g) => (
+          <div key={g.key} style={{ background: "#F8FAFC", borderRadius: "8px", padding: "12px 16px", marginBottom: "8px", border: "1px solid #E2E8F0" }}>
+            <div style={{ fontSize: "12px", color: "#64748B", marginBottom: "2px" }}>{g.key}</div>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "monospace" }}>{g.val}</div>
+          </div>
+        ))}
+      </div>
 
-function formToPackageInput(form: PackageForm) {
-  return {
-    id: form.id.trim(),
-    ...formToPackageUpdateInput(form),
-  };
-}
+      {/* Create tenant + Tenants list */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+        <div style={{ ...card, padding: "20px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A", marginBottom: "4px" }}>Create Tenant</div>
+          <div style={{ fontSize: "11px", color: "#94A3B8", marginBottom: "16px" }}>Defines a logical ownership boundary for users and VMs.</div>
+          <form onSubmit={(e) => void handleCreateTenant(e)} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              {[["Name", "name", "Edge Lab", false], ["Slug", "slug", "edge-lab", true]].map(([l, k, ph, mono]) => (
+                <div key={String(k)}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "5px" }}>{l}</label>
+                  <input value={(tenantForm as Record<string, string | number>)[String(k)] as string} onChange={(e) => setTenantForm((f) => ({ ...f, [String(k)]: e.target.value }))} placeholder={String(ph)} style={{ ...inp, fontFamily: mono ? "monospace" : "inherit" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              {[["VM Limit", "maxVms"], ["CPU Limit", "maxCpuCores"], ["RAM MB", "maxMemoryMb"], ["Disk GB", "maxDiskGb"]].map(([l, k]) => (
+                <div key={String(k)}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "5px" }}>{l}</label>
+                  <input type="number" value={(tenantForm as unknown as Record<string, number>)[String(k)]} onChange={(e) => setTenantForm((f) => ({ ...f, [String(k)]: Number(e.target.value) }))} style={numInp} />
+                </div>
+              ))}
+            </div>
+            <button type="submit" style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", marginTop: "4px" }}>Create Tenant</button>
+          </form>
+        </div>
 
-function formToPackageUpdateInput(form: PackageForm) {
-  return {
-    name: form.name.trim(),
-    description: form.description.trim(),
-    cpuCores: Number(form.cpuCores),
-    memoryMb: Number(form.memoryMb),
-    diskGb: Number(form.diskGb),
-    badge: form.badge.trim(),
-    sortOrder: Number(form.sortOrder),
-    isActive: form.isActive,
-  };
-}
+        <div style={{ ...card, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>Tenants</div>
+            <div style={{ fontSize: "11px", color: "#94A3B8" }}>Logical boundaries for VM visibility and network scope.</div>
+          </div>
+          {tenants.map((t, i) => {
+            const usage = tenantUsage.find((u) => u.id === t.id);
+            const form = quotaForms[t.id] ?? tenantToForm(t);
+            return (
+              <div key={t.id} style={{ padding: "16px 20px", borderBottom: i < tenants.length - 1 ? "1px solid #F8FAFC" : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A" }}>{t.name}</div>
+                    <div style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "monospace" }}>{t.slug}</div>
+                  </div>
+                </div>
+                {usage && (
+                  <div style={{ display: "flex", gap: "12px", marginBottom: "10px" }}>
+                    <QuotaBar label="VMs" used={usage.usedVms} max={usage.maxVms} />
+                    <QuotaBar label="CPU" used={usage.usedCpuCores} max={usage.maxCpuCores} unit="c" />
+                    <QuotaBar label="RAM" used={Math.round(usage.usedMemoryMb / 1024)} max={Math.round(usage.maxMemoryMb / 1024)} unit="GB" />
+                    <QuotaBar label="Disk" used={usage.usedDiskGb} max={usage.maxDiskGb} unit="GB" />
+                  </div>
+                )}
+                <form onSubmit={(e) => void handleSaveQuota(e, t.id)} style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr) auto", gap: "8px", alignItems: "end" }}>
+                  {[["VMs", "maxVms"], ["CPU", "maxCpuCores"], ["RAM MB", "maxMemoryMb"], ["Disk GB", "maxDiskGb"]].map(([l, k]) => (
+                    <div key={String(k)}>
+                      <div style={{ fontSize: "10px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>{l}</div>
+                      <input type="number" value={form[k as keyof TenantQuotaForm]} onChange={(e) => setQuotaForms((prev) => ({ ...prev, [t.id]: { ...(prev[t.id] ?? tenantToForm(t)), [k]: e.target.value } }))} style={numInp} />
+                    </div>
+                  ))}
+                  <button type="submit" style={{ padding: "7px 12px", borderRadius: "7px", border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#334155", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Save</button>
+                </form>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-function updatePackageForm(
-  forms: Record<string, PackageForm>,
-  packageId: string,
-  key: keyof PackageForm,
-  value: string | boolean,
-): Record<string, PackageForm> {
-  const current = forms[packageId] ?? defaultPackageForm();
-  return {
-    ...forms,
-    [packageId]: {
-      ...current,
-      [key]: value,
-    },
-  };
+      {/* VM Packages */}
+      <div style={{ ...card, padding: "24px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>VM Packages</div>
+            <div style={{ fontSize: "11px", color: "#94A3B8" }}>Plans users can select during VM creation. Inactive packages stay hidden.</div>
+          </div>
+        </div>
+
+        <div style={{ background: "#F8FAFC", borderRadius: "10px", padding: "16px", marginBottom: "20px", border: "1px solid #E2E8F0" }}>
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#64748B", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>New Package</div>
+          <form onSubmit={(e) => void handleCreatePkg(e)}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "10px" }}>
+              {[["Package ID", "id", true], ["Name", "name", false], ["Badge", "badge", false], ["Sort", "sortOrder", false]].map(([l, k, mono]) => (
+                <div key={String(k)}>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: "5px" }}>{l}</label>
+                  <input value={(pkgForm as Record<string, string | boolean>)[String(k)] as string} onChange={(e) => setPkgForm((f) => ({ ...f, [String(k)]: e.target.value }))} style={{ ...inp, fontFamily: mono ? "monospace" : "inherit" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 2fr auto", gap: "10px", alignItems: "end" }}>
+              {[["CPU", "cpuCores"], ["RAM MB", "memoryMb"], ["Disk GB", "diskGb"]].map(([l, k]) => (
+                <div key={String(k)}>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: "5px" }}>{l}</label>
+                  <input type="number" value={(pkgForm as unknown as Record<string, string>)[String(k)]} onChange={(e) => setPkgForm((f) => ({ ...f, [String(k)]: e.target.value }))} style={numInp} />
+                </div>
+              ))}
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#374151", marginBottom: "5px" }}>Description</label>
+                <input value={pkgForm.description} onChange={(e) => setPkgForm((f) => ({ ...f, description: e.target.value }))} style={inp} />
+              </div>
+              <button type="submit" style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "#2563EB", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Create</button>
+            </div>
+          </form>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {packages.map((pkg) => (
+            <div key={pkg.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderRadius: "9px", border: "1px solid #E2E8F0", background: pkg.isActive ? "#fff" : "#F8FAFC", opacity: pkg.isActive ? 1 : 0.65 }}>
+              <div style={{ width: "100px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A" }}>{pkg.name}</div>
+                <div style={{ fontSize: "10px", color: "#94A3B8", fontFamily: "monospace" }}>{pkg.id} · {pkg.isActive ? "active" : "inactive"}</div>
+              </div>
+              {[["CPU", pkg.cpuCores], ["RAM MB", pkg.memoryMb], ["DISK GB", pkg.diskGb], ["BADGE", pkg.badge], ["SORT", pkg.sortOrder]].map(([l, v]) => (
+                <div key={String(l)} style={{ flex: 1, minWidth: "55px" }}>
+                  <div style={{ fontSize: "9px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>{l}</div>
+                  <div style={{ fontSize: "12px", color: "#334155", fontWeight: 600, fontFamily: "monospace" }}>{v}</div>
+                </div>
+              ))}
+              <div style={{ flex: 2, minWidth: "120px" }}>
+                <div style={{ fontSize: "9px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>DESCRIPTION</div>
+                <div style={{ fontSize: "11px", color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pkg.description}</div>
+              </div>
+              <button onClick={() => setEditPkg(pkgToForm(pkg))} style={{ padding: "5px 14px", borderRadius: "7px", border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#2563EB", fontSize: "11px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>Edit</button>
+              <button onClick={() => void handleDeletePkg(pkg.id, pkg.name)} style={{ padding: "5px 10px", borderRadius: "7px", border: "1px solid #FEE2E2", background: "#FFF5F5", color: "#EF4444", fontSize: "11px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>Delete</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Provisioning failures */}
+      <div style={{ ...card, padding: "20px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>Provisioning Failures</div>
+          <div style={{ fontSize: "11px", color: "#94A3B8" }}>Failed jobs can be requeued after provider issues are fixed.</div>
+        </div>
+        {failedReqs.length === 0 && <div style={{ fontSize: "13px", color: "#94A3B8", textAlign: "center", padding: "16px 0" }}>No failed provisioning requests.</div>}
+        {failedReqs.map((req) => {
+          const err = (() => { try { return (JSON.parse(req.providerPayload) as Record<string, unknown>).error as string | undefined; } catch { return undefined; } })();
+          return (
+            <div key={req.id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "9px", border: "1px solid #FEE2E2", background: "#FFF7F7", marginBottom: "8px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "monospace", marginBottom: "2px" }}>VM #{req.vmInstanceId} <span style={{ fontWeight: 400, color: "#94A3B8", fontSize: "11px" }}>#{req.id}</span></div>
+                {err && <div style={{ fontSize: "12px", color: "#B91C1C" }}>{err}</div>}
+              </div>
+              <div style={{ fontSize: "11px", color: "#94A3B8", flexShrink: 0 }}>{new Date(req.createdAt).toLocaleDateString()}</div>
+              <button onClick={() => void handleRequeue(req.id)} disabled={busyReqId === req.id}
+                style={{ padding: "5px 12px", borderRadius: "7px", border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#2563EB", fontSize: "11px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+                {busyReqId === req.id ? "…" : "↺ Retry"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Audit events */}
+      <div style={{ ...card, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>Audit Events</div>
+          <div style={{ fontSize: "11px", color: "#94A3B8" }}>Operational trace for user, tenant and VM actions.</div>
+        </div>
+        {auditEvents.length === 0 && <div style={{ fontSize: "13px", color: "#94A3B8", textAlign: "center", padding: "24px 0" }}>No audit events recorded yet.</div>}
+        {auditEvents.map((ev, i) => (
+          <div key={ev.id} style={{ padding: "12px 20px", borderBottom: i < auditEvents.length - 1 ? "1px solid #F8FAFC" : "none", display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "12px", fontWeight: 600, color: "#0F172A" }}>{ev.action}</div>
+              <div style={{ fontSize: "11px", color: "#94A3B8" }}>{ev.entityType} #{ev.entityId}</div>
+            </div>
+            <div style={{ fontSize: "11px", color: "#94A3B8", flexShrink: 0 }}>{new Date(ev.createdAt).toLocaleString()}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Edit package modal */}
+      {editPkg && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }} onClick={() => setEditPkg(null)}>
+          <form onSubmit={(e) => void handleSavePkg(e)} style={{ background: "#fff", borderRadius: "16px", padding: "28px", width: "520px", boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "#0F172A" }}>Edit Package</div>
+                <div style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "monospace", marginTop: "2px" }}>{editPkg.id}</div>
+              </div>
+              <button type="button" onClick={() => setEditPkg(null)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: "20px", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
+              {[["Name", "name"], ["Badge", "badge"]].map(([l, k]) => (
+                <div key={String(k)}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>{l}</label>
+                  <input value={(editPkg as unknown as Record<string, string>)[String(k)]} onChange={(e) => setEditPkg((f) => f ? { ...f, [String(k)]: e.target.value } : f)} style={{ ...inp, padding: "9px 12px" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+              {[["CPU", "cpuCores"], ["RAM MB", "memoryMb"], ["Disk GB", "diskGb"], ["Sort", "sortOrder"]].map(([l, k]) => (
+                <div key={String(k)}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>{l}</label>
+                  <input type="number" value={(editPkg as unknown as Record<string, string>)[String(k)]} onChange={(e) => setEditPkg((f) => f ? { ...f, [String(k)]: e.target.value } : f)} style={{ ...numInp, padding: "9px 10px" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>Description</label>
+              <input value={editPkg.description} onChange={(e) => setEditPkg((f) => f ? { ...f, description: e.target.value } : f)} style={{ ...inp, padding: "9px 12px" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "16px", borderTop: "1px solid #F1F5F9" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 600, color: "#374151", cursor: "pointer" }}>
+                <input type="checkbox" checked={editPkg.isActive} onChange={(e) => setEditPkg((f) => f ? { ...f, isActive: e.target.checked } : f)} style={{ width: "16px", height: "16px", accentColor: "#2563EB" }} />
+                Active for users
+              </label>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button type="button" onClick={() => setEditPkg(null)} style={{ padding: "9px 18px", borderRadius: "8px", border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                <button type="submit" style={{ padding: "9px 18px", borderRadius: "8px", border: "none", background: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Save Package</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
 }

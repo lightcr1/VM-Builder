@@ -1,234 +1,145 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import type { ProvisioningRequest, Tenant, Vm } from "@/types";
-import { RequestStatusPill } from "@/components/RequestStatusPill";
-import { SectionHeader } from "@/components/SectionHeader";
-import { StatusPill } from "@/components/StatusPill";
 
-export function DashboardPage() {
-  const [vms, setVms] = useState<Vm[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [requests, setRequests] = useState<ProvisioningRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState(0);
+const statusCfg: Record<string, { bg: string; color: string; dot: string; label: string }> = {
+  running:      { bg: "rgba(16,185,129,0.1)",  color: "#10B981", dot: "#10B981", label: "Running" },
+  stopped:      { bg: "rgba(100,116,139,0.1)", color: "#64748B", dot: "#94A3B8", label: "Stopped" },
+  provisioning: { bg: "rgba(59,130,246,0.1)",  color: "#3B82F6", dot: "#3B82F6", label: "Provisioning" },
+  requested:    { bg: "rgba(100,116,139,0.1)", color: "#64748B", dot: "#94A3B8", label: "Requested" },
+  error:        { bg: "rgba(239,68,68,0.1)",   color: "#EF4444", dot: "#EF4444", label: "Error" },
+};
 
-  useEffect(() => {
-    let active = true;
-    let intervalId: number | undefined;
-
-    async function loadDashboard(isBackgroundRefresh: boolean) {
-      if (!active) return;
-      if (isBackgroundRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-
-      try {
-        const [vmList, tenantList, requestList] = await Promise.all([api.vms.list(), api.tenants.list(), api.vms.requests()]);
-        if (!active) return;
-        setVms(vmList);
-        setTenants(tenantList);
-        setRequests(requestList);
-        setLastUpdated(new Date().toISOString());
-        setError(null);
-      } catch (loadError) {
-        if (!active) return;
-        setError(loadError instanceof Error ? loadError.message : "Dashboard refresh failed");
-      } finally {
-        if (!active) return;
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    }
-
-    void loadDashboard(false);
-    intervalId = window.setInterval(() => {
-      void loadDashboard(true);
-    }, 5000);
-
-    return () => {
-      active = false;
-      if (intervalId) {
-        window.clearInterval(intervalId);
-      }
-    };
-  }, [refreshToken]);
-
+function StatusBadge({ status }: { status: string }) {
+  const s = statusCfg[status] ?? statusCfg.stopped;
   return (
-    <div className="page-stack">
-      <SectionHeader
-        title="Dashboard"
-        description="A compact workspace for the VMs you own or are allowed to operate."
-        action={
-          <div className="header-actions">
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => setRefreshToken((current) => current + 1)}
-              disabled={isRefreshing}
-            >
-              {isRefreshing ? "Refreshing..." : "Refresh"}
-            </button>
-            <Link className="primary-link" to="/create">
-              Create VM
-            </Link>
-          </div>
-        }
-      />
-
-      <section className="surface dashboard-signal">
-        <div>
-          <strong>{isLoading ? "Loading dashboard" : "Live provisioning view"}</strong>
-          <span>
-            {error
-              ? `Last refresh failed: ${error}`
-              : lastUpdated
-                ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}`
-                : "Waiting for first refresh"}
-          </span>
-        </div>
-        <span className={`signal-dot ${error ? "signal-error" : "signal-ok"}`} />
-      </section>
-
-      <div className="metric-strip">
-        <div>
-          <span>VMs</span>
-          <strong>{vms.length}</strong>
-        </div>
-        <div>
-          <span>Tenants</span>
-          <strong>{tenants.length}</strong>
-        </div>
-        <div>
-          <span>Provisioning</span>
-          <strong>{requests.filter((request) => request.status === "pending" || request.status === "approved").length}</strong>
-        </div>
-      </div>
-
-      <div className="dashboard-grid">
-        <section className="surface">
-          <div className="table-header">
-            <p>Instances</p>
-            <span>Scoped to your memberships and ownership.</span>
-          </div>
-          <div className="table-columns">
-            <span>Name</span>
-            <span>Tenant</span>
-            <span>Created</span>
-            <span>Status</span>
-          </div>
-          <div className="vm-table">
-            {vms.length === 0 ? <p className="empty-state">No VMs visible yet.</p> : null}
-            {vms.map((vm) => (
-              <article className="vm-row vm-grid-row" key={vm.id}>
-                <div>
-                  <strong>{vm.name}</strong>
-                  <span>{vm.template.name}</span>
-                </div>
-                <div>
-                  <strong>{vm.tenant.name}</strong>
-                  <span>{vm.providerName}</span>
-                </div>
-                <div>
-                  <strong>{new Date(vm.createdAt).toLocaleDateString()}</strong>
-                  <span>{vm.providerVmId ? `VMID ${vm.providerVmId}` : "Pending provider ID"}</span>
-                </div>
-                <StatusPill status={vm.status} />
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="surface summary-panel">
-          <div className="table-header">
-            <p>Platform summary</p>
-            <span>Fast operator context, similar to a cloud overview pane.</span>
-          </div>
-          <div className="summary-stack">
-            <div className="summary-item">
-              <span>Running instances</span>
-              <strong>{vms.filter((vm) => vm.status === "running").length}</strong>
-            </div>
-            <div className="summary-item">
-              <span>Failed requests</span>
-              <strong>{requests.filter((request) => request.status === "failed").length}</strong>
-            </div>
-            <div className="summary-item">
-              <span>Default tenant views</span>
-              <strong>{tenants.length}</strong>
-            </div>
-          </div>
-          <div className="summary-note">
-            <strong>Hosted by arcs-cloud</strong>
-            <span>Managed self-service infrastructure with a direct path into Proxmox-backed automation.</span>
-            <a href="https://arcs-cloud.ch" target="_blank" rel="noreferrer">
-              Visit arcs-cloud.ch
-            </a>
-          </div>
-        </section>
-      </div>
-
-      <section className="surface">
-        <div className="table-header">
-          <p>Provisioning queue</p>
-          <span>Tracks the async worker path from request to completed provisioning.</span>
-        </div>
-        <div className="table-columns request-columns">
-          <span>Request</span>
-          <span>Execution</span>
-          <span>Submitted</span>
-          <span>Status</span>
-        </div>
-        <div className="vm-table">
-          {requests.length === 0 ? <p className="empty-state">No provisioning requests yet.</p> : null}
-          {requests.slice(0, 6).map((request) => {
-            const details = parsePayload(request.providerPayload);
-            return (
-              <article className="vm-row request-grid-row" key={request.id}>
-                <div>
-                  <strong>Request #{request.id}</strong>
-                  <span>
-                    VM #{request.vmInstanceId} · {details.template ?? "Template pending"}
-                  </span>
-                </div>
-                <div>
-                  <strong>{details.providerStatus ?? details.ipConfigMode ?? "Awaiting worker"}</strong>
-                  {details.error ? <span className="request-error">{details.error}</span> : <span>Worker-managed execution</span>}
-                </div>
-                <div>
-                  <strong>{new Date(request.createdAt).toLocaleDateString()}</strong>
-                  <span>{new Date(request.createdAt).toLocaleTimeString()}</span>
-                </div>
-                <RequestStatusPill status={request.status} />
-              </article>
-            );
-          })}
-        </div>
-      </section>
-    </div>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 8px", borderRadius: "20px", background: s.bg, color: s.color, fontSize: "11px", fontWeight: 600 }}>
+      <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: s.dot, display: "inline-block" }} />
+      {s.label}
+    </span>
   );
 }
 
-function parsePayload(payload: string): {
-  template?: string;
-  providerStatus?: string;
-  ipConfigMode?: string;
-  error?: string;
-} {
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return {
-      template: parsed.template ? String(parsed.template) : undefined,
-      providerStatus: parsed.provider_status ? String(parsed.provider_status) : undefined,
-      ipConfigMode: parsed.ip_config_mode ? String(parsed.ip_config_mode) : undefined,
-      error: parsed.error ? String(parsed.error) : undefined,
-    };
-  } catch {
-    return {};
-  }
+const card = { background: "#fff", borderRadius: "12px", border: "1px solid #E2E8F0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
+
+export function DashboardPage() {
+  const navigate = useNavigate();
+  const [vms, setVms] = useState<Vm[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [requests, setRequests] = useState<ProvisioningRequest[]>([]);
+
+  useEffect(() => {
+    void Promise.all([api.vms.list(), api.tenants.list(), api.vms.requests()]).then(([vmList, tenantList, reqList]) => {
+      setVms(vmList);
+      setTenants(tenantList);
+      setRequests(reqList);
+    });
+  }, []);
+
+  const running = vms.filter((v) => v.status === "running").length;
+  const stopped = vms.filter((v) => v.status === "stopped").length;
+  const provisioning = vms.filter((v) => v.status === "provisioning" || v.status === "requested").length;
+  const pendingReqs = requests.filter((r) => r.status === "pending" || r.status === "approved").length;
+  const failedJobs = requests.filter((r) => r.status === "failed").length;
+  const totalCpu = vms.reduce((sum, v) => sum + v.cpuCores, 0);
+
+  const statCards = [
+    { label: "Running VMs", value: running, color: "#10B981", sub: `${stopped} stopped · ${provisioning} provisioning` },
+    { label: "Pending Requests", value: pendingReqs, color: "#F59E0B", sub: `${failedJobs} failed` },
+    { label: "Active Tenants", value: tenants.length, color: "#3B82F6", sub: "Logical scopes" },
+    { label: "Total vCPUs", value: totalCpu, color: "#8B5CF6", sub: "Across all VMs" },
+  ];
+
+  const recent = requests.slice(0, 5);
+
+  return (
+    <div>
+      <div style={{ marginBottom: "28px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Workspace</div>
+        <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#0F172A", margin: 0 }}>Overview</h1>
+        <p style={{ fontSize: "13px", color: "#64748B", marginTop: "4px" }}>Platform health, active instances and recent activity.</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "24px" }}>
+        {statCards.map((c) => (
+          <div key={c.label} style={{ ...card, padding: "20px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>{c.label}</div>
+            <div style={{ fontSize: "28px", fontWeight: 800, color: c.color, lineHeight: 1 }}>{c.value}</div>
+            <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "16px" }}>
+        <div style={{ ...card, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>Virtual Machines</div>
+              <div style={{ fontSize: "11px", color: "#94A3B8" }}>{vms.length} total instances</div>
+            </div>
+            <button onClick={() => navigate("/create")} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: "7px", padding: "7px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+              + New VM
+            </button>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#F8FAFC" }}>
+                {["Name", "Tenant", "Package", "Template", "Status", "Created"].map((h) => (
+                  <th key={h} style={{ padding: "9px 16px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.05em", textTransform: "uppercase", borderBottom: "1px solid #F1F5F9" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {vms.map((vm, i) => (
+                <tr key={vm.id} style={{ borderBottom: i < vms.length - 1 ? "1px solid #F8FAFC" : "none", cursor: "pointer" }} onClick={() => navigate("/instances")}>
+                  <td style={{ padding: "12px 16px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", fontFamily: "monospace" }}>{vm.name}</div>
+                    <div style={{ fontSize: "11px", color: "#94A3B8" }}>{vm.description || "No description"}</div>
+                  </td>
+                  <td style={{ padding: "12px 16px", fontSize: "12px", color: "#64748B" }}>{vm.tenant.name}</td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <span style={{ fontSize: "12px", color: "#475569", background: "#F1F5F9", padding: "3px 8px", borderRadius: "5px", fontWeight: 500 }}>{vm.packageId}</span>
+                  </td>
+                  <td style={{ padding: "12px 16px", fontSize: "12px", color: "#64748B" }}>{vm.template.name}</td>
+                  <td style={{ padding: "12px 16px" }}><StatusBadge status={vm.status} /></td>
+                  <td style={{ padding: "12px 16px", fontSize: "12px", color: "#64748B" }}>{new Date(vm.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+              {vms.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ padding: "40px", textAlign: "center", color: "#94A3B8", fontSize: "13px" }}>No VMs yet. Create one to get started.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ ...card, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A" }}>Activity</div>
+            <div style={{ fontSize: "11px", color: "#94A3B8" }}>Recent provisioning events</div>
+          </div>
+          <div style={{ padding: "8px 0" }}>
+            {recent.length === 0 && (
+              <div style={{ padding: "24px 20px", fontSize: "12px", color: "#94A3B8", textAlign: "center" }}>No recent activity.</div>
+            )}
+            {recent.map((req, i) => {
+              const dotColor = req.status === "completed" ? "#10B981" : req.status === "failed" ? "#EF4444" : "#3B82F6";
+              const msg = req.status === "completed" ? "Provisioning completed" : req.status === "failed" ? "Provisioning failed" : "Provisioning in progress";
+              return (
+                <div key={req.id} style={{ padding: "12px 20px", display: "flex", gap: "12px", alignItems: "flex-start", borderBottom: i < recent.length - 1 ? "1px solid #F8FAFC" : "none" }}>
+                  <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: dotColor, flexShrink: 0, marginTop: "4px" }} />
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#334155", lineHeight: "1.4" }}>{msg}</div>
+                    <div style={{ fontSize: "10px", color: "#94A3B8", marginTop: "2px" }}>VM #{req.vmInstanceId} · Request #{req.id}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

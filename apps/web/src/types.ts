@@ -91,3 +91,25 @@ export type AuditEvent = {
   details: string;
   createdAt: string;
 };
+
+export type TenantUsage = {
+  id: number;
+  name: string;
+  slug: string;
+  usedVms: number;
+  usedCpuCores: number;
+  usedMemoryMb: number;
+  usedDiskGb: number;
+  maxVms: number;
+  maxCpuCores: number;
+  maxMemoryMb: number;
+  maxDiskGb: number;
+};
+
+export type SshKey = {
+  id: number;
+  name: string;
+  publicKey: string;
+  fingerprint: string;
+  createdAt: string;
+};
