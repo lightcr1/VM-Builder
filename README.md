@@ -105,6 +105,28 @@ infra/proxy/certs/tls.key
 
 Der Browser zeigt bei Self-Signed-Zertifikaten eine Warnung. Fuer Tests ist das normal. Wenn der Browser ohne Warnung vertrauen soll, importiere `infra/proxy/certs/tls.crt` in den Truststore des Clients.
 
+## LDAP / Active Directory
+
+LDAP-Login ist im Backend implementiert. Wenn `LDAP_ENABLED=true` gesetzt ist, versucht der Login zuerst LDAP und faellt danach auf lokale Benutzer zurueck. Neue LDAP-Benutzer werden beim ersten erfolgreichen Login lokal angelegt und dem ersten Tenant als Default-Tenant zugeordnet.
+
+Minimalwerte in `.env`:
+
+```env
+LDAP_ENABLED=true
+LDAP_SERVER_URI=ldap://dc.corp.internal
+LDAP_BIND_DN=cn=svc-vm-builder,ou=service,dc=corp,dc=internal
+LDAP_BIND_PASSWORD=<service-account-password>
+LDAP_BASE_DN=dc=corp,dc=internal
+LDAP_USER_SEARCH_FILTER=(mail={email})
+LDAP_EMAIL_ATTRIBUTE=mail
+LDAP_NAME_ATTRIBUTE=cn
+LDAP_GROUP_ATTRIBUTE=memberOf
+LDAP_ALLOWED_GROUPS=CN=VM-Builder-Users,OU=Groups,DC=corp,DC=internal;CN=VM-Builder-Admins,OU=Groups,DC=corp,DC=internal
+LDAP_ADMIN_GROUPS=CN=VM-Builder-Admins,OU=Groups,DC=corp,DC=internal
+```
+
+`LDAP_ALLOWED_GROUPS` begrenzt, wer sich anmelden darf. `LDAP_ADMIN_GROUPS` mappt LDAP-Benutzer auf die Plattformrolle `admin`; alle anderen erlaubten LDAP-Benutzer werden `user`. Fuer vollstaendige DNs mit Kommas trenne mehrere Gruppen mit Semikolon. Fuer einfache Gruppennamen ohne Kommas funktioniert auch eine kommagetrennte Liste. Wenn `LDAP_ALLOWED_GROUPS` leer ist, duerfen alle gefundenen LDAP-Benutzer mit gueltigem Passwort einloggen.
+
 ## Docker Services
 
 `proxy`
@@ -666,7 +688,7 @@ README.md
 
 ## Aktuelle Grenzen
 
-- LDAP/AD ist vorbereitet, aber noch nicht voll aktiv.
+- LDAP/AD Login ist implementiert, muss aber gegen eure echte Directory-Struktur getestet werden.
 - OPNsense ist als zukuenftiger Network-Provider vorgesehen, aber noch nicht angebunden.
 - VM-Pakete sind als Datenbank- und Admin-Ressource umgesetzt, aber noch ohne Loesch-/Archivierungsworkflow.
 - Echte Proxmox-Ausfuehrung muss mit realem Cluster und echten Tokens getestet werden.

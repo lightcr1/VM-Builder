@@ -1,10 +1,13 @@
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from rq import Retry
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -200,6 +203,7 @@ def process_provisioning_request(request_id: int) -> None:
             payload["last_failed_at"] = datetime.now(timezone.utc).isoformat()
             request.provider_payload = json.dumps(payload)
             db.commit()
+            logger.error("VM provisioning failed: %s", exc, extra={"vm_id": vm.id, "tenant_id": vm.tenant_id})
             write_audit_event(
                 db,
                 action="vm.request_failed",
@@ -277,7 +281,7 @@ def _ensure_tenant_quota(
     requested_memory_mb: int,
     requested_disk_gb: int,
 ) -> None:
-    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
 

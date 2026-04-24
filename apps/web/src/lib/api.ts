@@ -1,4 +1,4 @@
-import type { AuditEvent, Me, ProvisioningRequest, Session, Tenant, User, Vm, VmPackage, VmStatus, VmTemplate } from "@/types";
+import type { AuditEvent, Me, ProvisioningRequest, Session, SshKey, Tenant, TenantUsage, User, Vm, VmPackage, VmStatus, VmTemplate } from "@/types";
 
 export type VmInput = {
   name: string;
@@ -27,6 +27,7 @@ type ApiClient = {
     listAll: () => Promise<Tenant[]>;
     create: (input: TenantQuotaInput & { name: string; slug: string }) => Promise<Tenant>;
     updateQuotas: (tenantId: number, input: TenantQuotaInput) => Promise<Tenant>;
+    getUsage: () => Promise<TenantUsage[]>;
   };
   users: {
     list: () => Promise<User[]>;
@@ -57,6 +58,12 @@ type ApiClient = {
     listAll: () => Promise<VmPackage[]>;
     create: (input: VmPackageInput) => Promise<VmPackage>;
     update: (packageId: string, input: VmPackageUpdateInput) => Promise<VmPackage>;
+    remove: (packageId: string) => Promise<void>;
+  };
+  sshKeys: {
+    list: () => Promise<SshKey[]>;
+    create: (input: { name: string; publicKey: string }) => Promise<SshKey>;
+    remove: (keyId: number) => Promise<void>;
   };
 };
 
@@ -98,7 +105,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let detail = `Request failed: ${response.status}`;
+    try {
+      const body = await response.json() as Record<string, unknown>;
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (body.detail !== null && typeof body.detail === "object") {
+        const d = body.detail as Record<string, unknown>;
+        detail = d.message ? String(d.message) : JSON.stringify(body.detail);
+      }
+    } catch { /* ignore parse errors */ }
+    throw new Error(detail);
   }
 
   if (response.status === 204) {
@@ -273,6 +290,21 @@ function mockClient(): ApiClient {
         Object.assign(tenant, input);
         return tenant;
       },
+      async getUsage() {
+        return mockDb.tenants.map((tenant) => ({
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          usedVms: mockDb.vms.filter((vm) => vm.tenant.id === tenant.id).length,
+          usedCpuCores: mockDb.vms.filter((vm) => vm.tenant.id === tenant.id).reduce((sum, vm) => sum + vm.cpuCores, 0),
+          usedMemoryMb: mockDb.vms.filter((vm) => vm.tenant.id === tenant.id).reduce((sum, vm) => sum + vm.memoryMb, 0),
+          usedDiskGb: mockDb.vms.filter((vm) => vm.tenant.id === tenant.id).reduce((sum, vm) => sum + vm.diskGb, 0),
+          maxVms: tenant.maxVms,
+          maxCpuCores: tenant.maxCpuCores,
+          maxMemoryMb: tenant.maxMemoryMb,
+          maxDiskGb: tenant.maxDiskGb,
+        }));
+      },
     },
     users: {
       async list() {
@@ -392,6 +424,27 @@ function mockClient(): ApiClient {
         mockDb.packages.sort((left, right) => left.sortOrder - right.sortOrder);
         return vmPackage;
       },
+      async remove(packageId) {
+        const index = mockDb.packages.findIndex((entry) => entry.id === packageId);
+        if (index >= 0) {
+          mockDb.packages.splice(index, 1);
+        }
+      },
+    },
+    sshKeys: {
+      async list() {
+        return [];
+      },
+      async create(input) {
+        return {
+          id: Date.now(),
+          name: input.name,
+          publicKey: input.publicKey,
+          fingerprint: "mock:fingerprint",
+          createdAt: new Date().toISOString(),
+        };
+      },
+      async remove() {},
     },
   };
 }
@@ -454,6 +507,10 @@ function httpClient(): ApiClient {
           }),
         });
         return normalizeTenant(tenant);
+      },
+      getUsage: async () => {
+        const usage = await requestJson<Array<Record<string, unknown>>>("/admin/tenants/usage");
+        return usage.map(normalizeTenantUsage);
       },
     },
     users: {
@@ -561,6 +618,25 @@ function httpClient(): ApiClient {
           body: JSON.stringify(packageToApiPayload(input)),
         });
         return normalizePackage(vmPackage);
+      },
+      remove: async (packageId) => {
+        await requestJson(`/admin/vm-packages/${packageId}`, { method: "DELETE" });
+      },
+    },
+    sshKeys: {
+      list: async () => {
+        const keys = await requestJson<Array<Record<string, unknown>>>("/ssh-keys");
+        return keys.map(normalizeSshKey);
+      },
+      create: async (input) => {
+        const key = await requestJson<Record<string, unknown>>("/ssh-keys", {
+          method: "POST",
+          body: JSON.stringify({ name: input.name, public_key: input.publicKey }),
+        });
+        return normalizeSshKey(key);
+      },
+      remove: async (keyId) => {
+        await requestJson(`/ssh-keys/${keyId}`, { method: "DELETE" });
       },
     },
   };
@@ -680,5 +756,31 @@ function normalizeProvisioningRequest(payload: Record<string, unknown>): Provisi
     providerPayload: String(payload.provider_payload ?? payload.providerPayload ?? "{}"),
     createdAt: String(payload.created_at ?? payload.createdAt ?? ""),
     vmInstanceId: Number(payload.vm_instance_id ?? payload.vmInstanceId ?? 0),
+  };
+}
+
+function normalizeTenantUsage(payload: Record<string, unknown>): TenantUsage {
+  return {
+    id: Number(payload.id),
+    name: String(payload.name ?? ""),
+    slug: String(payload.slug ?? ""),
+    usedVms: Number(payload.used_vms ?? payload.usedVms ?? 0),
+    usedCpuCores: Number(payload.used_cpu_cores ?? payload.usedCpuCores ?? 0),
+    usedMemoryMb: Number(payload.used_memory_mb ?? payload.usedMemoryMb ?? 0),
+    usedDiskGb: Number(payload.used_disk_gb ?? payload.usedDiskGb ?? 0),
+    maxVms: Number(payload.max_vms ?? payload.maxVms ?? 0),
+    maxCpuCores: Number(payload.max_cpu_cores ?? payload.maxCpuCores ?? 0),
+    maxMemoryMb: Number(payload.max_memory_mb ?? payload.maxMemoryMb ?? 0),
+    maxDiskGb: Number(payload.max_disk_gb ?? payload.maxDiskGb ?? 0),
+  };
+}
+
+function normalizeSshKey(payload: Record<string, unknown>): SshKey {
+  return {
+    id: Number(payload.id),
+    name: String(payload.name ?? ""),
+    publicKey: String(payload.public_key ?? payload.publicKey ?? ""),
+    fingerprint: String(payload.fingerprint ?? ""),
+    createdAt: String(payload.created_at ?? payload.createdAt ?? ""),
   };
 }

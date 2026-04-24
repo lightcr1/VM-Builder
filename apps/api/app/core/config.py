@@ -25,7 +25,12 @@ class Settings(BaseSettings):
     ldap_bind_dn: str = ""
     ldap_bind_password: str = ""
     ldap_base_dn: str = ""
+    ldap_user_search_filter: str = "(mail={email})"
+    ldap_email_attribute: str = "mail"
+    ldap_name_attribute: str = "cn"
+    ldap_group_attribute: str = "memberOf"
     ldap_allowed_groups: str = ""
+    ldap_admin_groups: str = ""
 
     proxmox_base_url: str = ""
     proxmox_token_id: str = ""
@@ -50,7 +55,11 @@ class Settings(BaseSettings):
 
     @property
     def ldap_allowed_groups_list(self) -> list[str]:
-        return [group.strip() for group in self.ldap_allowed_groups.split(",") if group.strip()]
+        return _split_env_list(self.ldap_allowed_groups)
+
+    @property
+    def ldap_admin_groups_list(self) -> list[str]:
+        return _split_env_list(self.ldap_admin_groups)
 
     @property
     def provisioning_retry_intervals_list(self) -> list[int]:
@@ -63,3 +72,8 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def _split_env_list(value: str) -> list[str]:
+    separator = ";" if ";" in value else ","
+    return [item.strip() for item in value.split(separator) if item.strip()]

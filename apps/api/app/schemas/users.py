@@ -59,3 +59,17 @@ class MembershipRead(BaseModel):
 
 class MeResponse(UserRead):
     memberships: list[MembershipRead]
+
+
+class TenantUsageRead(BaseModel):
+    id: int
+    name: str
+    slug: str
+    used_vms: int
+    used_cpu_cores: int
+    used_memory_mb: int
+    used_disk_gb: int
+    max_vms: int
+    max_cpu_cores: int
+    max_memory_mb: int
+    max_disk_gb: int

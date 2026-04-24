@@ -1,18 +1,18 @@
-from sqlalchemy import select
-from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.db.session import get_db
-from app.models.domain import Membership, Tenant, User
+from app.models.domain import Membership, Tenant, User, VmInstance, VmStatus
 from app.schemas.common import AuditEventRead
 from app.schemas.vms import ProvisioningRequestRead, VmPackageCreate, VmPackageRead, VmPackageUpdate
-from app.schemas.users import TenantCreate, TenantQuotaUpdate, TenantRead, UserCreate, UserRead
+from app.schemas.users import TenantCreate, TenantQuotaUpdate, TenantRead, TenantUsageRead, UserCreate, UserRead
 from app.services.audit import write_audit_event
 from app.services.auth import require_admin
 from app.services.bootstrap import ensure_vm_templates
 from app.services.provisioning import requeue_failed_request
-from app.services.vm_packages import create_vm_package, list_vm_packages, package_to_read, update_vm_package
+from app.services.vm_packages import create_vm_package, delete_vm_package, list_vm_packages, package_to_read, update_vm_package
 
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -70,6 +70,39 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), admin=Depend
 @router.get("/tenants", response_model=list[TenantRead])
 def list_tenants(db: Session = Depends(get_db)) -> list[Tenant]:
     return db.scalars(select(Tenant).order_by(Tenant.name.asc())).all()
+
+
+@router.get("/tenants/usage", response_model=list[TenantUsageRead])
+def get_tenants_usage(db: Session = Depends(get_db)) -> list[TenantUsageRead]:
+    tenants = db.scalars(select(Tenant).order_by(Tenant.name.asc())).all()
+    result = []
+    for tenant in tenants:
+        row = db.execute(
+            select(
+                func.count(VmInstance.id),
+                func.coalesce(func.sum(VmInstance.cpu_cores), 0),
+                func.coalesce(func.sum(VmInstance.memory_mb), 0),
+                func.coalesce(func.sum(VmInstance.disk_gb), 0),
+            )
+            .where(VmInstance.tenant_id == tenant.id)
+            .where(VmInstance.status != VmStatus.ERROR)
+        ).one()
+        result.append(
+            TenantUsageRead(
+                id=tenant.id,
+                name=tenant.name,
+                slug=tenant.slug,
+                used_vms=int(row[0]),
+                used_cpu_cores=int(row[1]),
+                used_memory_mb=int(row[2]),
+                used_disk_gb=int(row[3]),
+                max_vms=tenant.max_vms,
+                max_cpu_cores=tenant.max_cpu_cores,
+                max_memory_mb=tenant.max_memory_mb,
+                max_disk_gb=tenant.max_disk_gb,
+            )
+        )
+    return result
 
 
 @router.post("/tenants", response_model=TenantRead, status_code=status.HTTP_201_CREATED)
@@ -177,6 +210,24 @@ def update_admin_vm_package(
         },
     )
     return package_to_read(vm_package)
+
+
+@router.delete("/vm-packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_vm_package(
+    package_id: str,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+) -> Response:
+    delete_vm_package(db, package_id)
+    write_audit_event(
+        db,
+        action="admin.vm_package_deleted",
+        entity_type="vm_package",
+        entity_id=package_id,
+        actor_user_id=admin.id,
+        details={"package_id": package_id},
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/audit-events", response_model=list[AuditEventRead])
